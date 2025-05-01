@@ -1,0 +1,52 @@
+<?xml version='1.0' encoding='utf-8'?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="dual_panda">
+  <xacro:arg name="arm_id_1" default="left"/>
+  <xacro:arg name="arm_id_2" default="right"/>
+  <xacro:arg name="hand_1" default="false"/>
+  <xacro:arg name="hand_2" default="false"/>
+  <xacro:arg name="parent_frame" default="world"/>
+
+  <xacro:property name="arm_id_1" value="$(arg arm_id_1)"/>
+  <xacro:property name="arm_id_2" value="$(arg arm_id_2)"/>
+
+  <xacro:include filename="$(find franka_moveit_config)/srdf/dual_panda_arm.xacro"/>
+  <xacro:dual_panda_arm arm_id="${arm_id_1}" />
+  <xacro:dual_panda_arm arm_id="${arm_id_2}" />
+
+  <virtual_joint name="virtual_joint" type="fixed" parent_frame="$(arg parent_frame)" child_link="base_link"/>
+  
+  <group name="dual_panda">
+    <group name="${arm_id_1}_arm"/>
+    <group name="${arm_id_2}_arm"/>
+    <xacro:if value="$(arg hand_1)">
+      <group name="${arm_id_1}_manipulator"/>
+    </xacro:if>
+    <xacro:if value="$(arg hand_2)">
+      <group name="${arm_id_2}_manipulator"/>
+    </xacro:if>
+  </group>
+
+  <xacro:include filename="$(find franka_moveit_config)/srdf/dual_group_definition.xacro"/>
+  <xacro:if value="$(arg hand_1)">
+    <!-- <xacro:group_definition arm_id="${arm_id_1}" group_name="${arm_id_1}_arm" tip_link="${arm_id_1}_link8"/> -->
+    <xacro:group_definition arm_id="${arm_id_1}" group_name="${arm_id_1}_manipulator" tip_link="${arm_id_1}_hand_tcp"/>
+    
+    <xacro:include filename="$(find franka_moveit_config)/srdf/dual_hand.xacro"/>
+    <xacro:hand arm_id="${arm_id_1}"/>
+
+    <xacro:include filename="$(find franka_moveit_config)/srdf/dual_panda_arm_hand.xacro"/>
+    <xacro:panda_arm_hand arm_id="${arm_id_1}"/>
+  </xacro:if>
+<!--  -->
+  <xacro:if value="$(arg hand_2)">
+    <!-- <xacro:group_definition arm_id="${arm_id_2}" group_name="${arm_id_2}_arm" tip_link="${arm_id_2}_link8"/> -->
+    <xacro:group_definition arm_id="${arm_id_2}" group_name="${arm_id_2}_manipulator" tip_link="${arm_id_2}_hand_tcp"/>
+
+    <xacro:include filename="$(find franka_moveit_config)/srdf/dual_hand.xacro"/>
+    <xacro:hand arm_id="${arm_id_2}"/>
+
+    <xacro:include filename="$(find franka_moveit_config)/srdf/dual_panda_arm_hand.xacro"/>
+    <xacro:panda_arm_hand arm_id="${arm_id_2}"/>
+  </xacro:if>
+
+</robot>

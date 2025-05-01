@@ -1,0 +1,11 @@
+string name
+mujoco_ros_msgs/EqualityConstraintType type
+mujoco_ros_msgs/SolverParameters solver_parameters
+bool active
+string class_param
+string element1
+string element2
+float64 torquescale
+geometry_msgs/Vector3 anchor
+geometry_msgs/Pose relpose
+float64[] polycoef

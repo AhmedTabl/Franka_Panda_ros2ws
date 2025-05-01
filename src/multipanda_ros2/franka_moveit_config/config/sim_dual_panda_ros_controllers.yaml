@@ -1,0 +1,55 @@
+mujoco_server:
+  ros__parameters:
+    MujocoPlugins:
+      names:
+        - mujoco_ros2_control
+      mujoco_ros2_control:
+        type: mujoco_ros2_control::MujocoRos2ControlPlugin
+
+controller_manager:
+  ros__parameters:
+    update_rate: 1000  # Hz
+
+    dual_panda_arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+dual_panda_arm_controller:
+  ros__parameters:
+    command_interfaces:
+      - effort
+    state_interfaces:
+      - position
+      - velocity
+    joints:
+      - mj_right_joint1
+      - mj_right_joint2
+      - mj_right_joint3
+      - mj_right_joint4
+      - mj_right_joint5
+      - mj_right_joint6
+      - mj_right_joint7
+      - mj_left_joint1
+      - mj_left_joint2
+      - mj_left_joint3
+      - mj_left_joint4
+      - mj_left_joint5
+      - mj_left_joint6
+      - mj_left_joint7
+    gains:
+      mj_left_joint1: { p: 600., d: 30., i: 0., i_clamp: 1., ff_velocity_scale: 1. }
+      mj_left_joint2: { p: 600., d: 30., i: 0., i_clamp: 1., ff_velocity_scale: 1. }
+      mj_left_joint3: { p: 600., d: 30., i: 0., i_clamp: 1., ff_velocity_scale: 1. }
+      mj_left_joint4: { p: 600., d: 30., i: 0., i_clamp: 1., ff_velocity_scale: 1. }
+      mj_left_joint5: { p: 250., d: 10., i: 0., i_clamp: 1., ff_velocity_scale: 1. }
+      mj_left_joint6: { p: 150., d: 10., i: 0., i_clamp: 1., ff_velocity_scale: 1. }
+      mj_left_joint7: { p: 50., d: 5., i: 0., i_clamp: 1., ff_velocity_scale: 1. }
+      mj_right_joint1: { p: 600., d: 30., i: 0., i_clamp: 1., ff_velocity_scale: 1. }
+      mj_right_joint2: { p: 600., d: 30., i: 0., i_clamp: 1., ff_velocity_scale: 1. }
+      mj_right_joint3: { p: 600., d: 30., i: 0., i_clamp: 1., ff_velocity_scale: 1. }
+      mj_right_joint4: { p: 600., d: 30., i: 0., i_clamp: 1., ff_velocity_scale: 1. }
+      mj_right_joint5: { p: 250., d: 10., i: 0., i_clamp: 1., ff_velocity_scale: 1. }
+      mj_right_joint6: { p: 150., d: 10., i: 0., i_clamp: 1., ff_velocity_scale: 1. }
+      mj_right_joint7: { p: 50., d: 5., i: 0., i_clamp: 1., ff_velocity_scale: 1. }

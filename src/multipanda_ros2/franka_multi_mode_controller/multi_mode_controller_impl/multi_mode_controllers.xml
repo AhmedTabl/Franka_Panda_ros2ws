@@ -1,0 +1,8 @@
+<library path="multi_mode_controller_impl">
+    <class name="multi_mode_controller/MultiModeController"
+           type="multi_mode_controller::MultiModeController" base_class_type="controller_interface::ControllerInterface">
+        <description>
+            The core multi mode controller to be loaded by controller_manager
+        </description>
+    </class>
+</library>
