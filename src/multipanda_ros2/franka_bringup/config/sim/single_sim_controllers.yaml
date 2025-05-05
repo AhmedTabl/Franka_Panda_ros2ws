@@ -14,24 +14,26 @@ mujoco_server:
           robot_description: "robot_description"
 
 controller_manager:
-    ros__parameters:
-      update_rate: 1000
-      joint_state_broadcaster:
-        type: joint_state_broadcaster/JointStateBroadcaster
-      franka_robot_state_broadcaster:
-        type: franka_robot_state_broadcaster/FrankaRobotStateBroadcaster
-      franka_robot_model_broadcaster:
-        type: franka_robot_state_broadcaster/FrankaRobotModelBroadcaster
-      joint_impedance_example_controller:
-        type: franka_example_controllers/JointImpedanceExampleController
-      cartesian_impedance_example_controller:
-        type: franka_example_controllers/CartesianImpedanceExampleController
-      multi_mode_controller:
-        type: multi_mode_controller/MultiModeController
-      move_to_start_example_controller:
-        type: franka_example_controllers/MoveToStartExampleController
-      joint_impedance_controller:
-        type: franka_example_controllers/JointImpedanceController
+  ros__parameters:
+    update_rate: 1000
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    franka_robot_state_broadcaster:
+      type: franka_robot_state_broadcaster/FrankaRobotStateBroadcaster
+    franka_robot_model_broadcaster:
+      type: franka_robot_state_broadcaster/FrankaRobotModelBroadcaster
+    joint_impedance_example_controller:
+      type: franka_example_controllers/JointImpedanceExampleController
+    cartesian_impedance_example_controller:
+      type: franka_example_controllers/CartesianImpedanceExampleController
+    multi_mode_controller:
+      type: multi_mode_controller/MultiModeController
+    move_to_start_example_controller:
+      type: franka_example_controllers/MoveToStartExampleController
+    joint_impedance_controller:
+      type: franka_example_controllers/JointImpedanceController
+    cartesian_impedance_controller:
+      type: franka_example_controllers/CartesianImpedanceController
         
 
 franka_robot_state_broadcaster:
@@ -79,7 +81,13 @@ joint_impedance_controller:
     arm_id: panda
     k_gains: [300.0, 300.0, 300.0, 300.0, 300.0, 300.0, 300.0]
     d_gains: [20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0]
-    
+
+cartesian_impedance_controller:
+  ros__parameters:
+    arm_id: panda
+    k_gains: [300.0, 300.0, 300.0, 300.0, 300.0, 300.0, 300.0]
+    d_gains: [20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0]
+
 multi_mode_controller:
   ros__parameters:
     arm_count: 1
@@ -87,9 +95,9 @@ multi_mode_controller:
       arm_id: panda
     controllers: ["panda_joint_impedance_controller", "panda_cartesian_impedance_controller"]
     resources:
-        panda_joint_impedance_controller: ["panda"]
-        panda_cartesian_impedance_controller: ["panda"]
+      panda_joint_impedance_controller: ["panda"]
+      panda_cartesian_impedance_controller: ["panda"]
     start_controllers:
-        names: ["panda_joint_impedance_controller"]
-        resources:
-            panda_joint_impedance_controller: ["panda"]
+      names: ["panda_joint_impedance_controller"]
+      resources:
+        panda_joint_impedance_controller: ["panda"]

@@ -1,0 +1,42 @@
+Mon May  5 13:24:42 2025
+ERROR: Failed to create GLFW window
+
+Mon May  5 13:40:10 2025
+ERROR: Failed to create GLFW window
+
+Mon May  5 13:42:38 2025
+ERROR: Failed to create GLFW window
+
+Mon May  5 13:43:38 2025
+ERROR: Failed to create GLFW window
+
+Mon May  5 13:46:52 2025
+ERROR: Failed to create GLFW window
+
+Mon May  5 13:50:01 2025
+ERROR: Failed to create GLFW window
+
+Mon May  5 13:52:24 2025
+ERROR: Failed to create GLFW window
+
+Mon May  5 14:03:39 2025
+ERROR: Failed to create GLFW window
+
+Mon May  5 14:05:57 2025
+ERROR: Failed to create GLFW window
+
+Mon May  5 14:13:31 2025
+ERROR: Failed to create GLFW window
+
+Mon May  5 14:14:54 2025
+ERROR: Failed to create GLFW window
+
+Mon May  5 14:16:18 2025
+ERROR: Failed to create GLFW window
+
+Mon May  5 14:17:26 2025
+ERROR: Failed to create GLFW window
+
+Mon May  5 14:20:56 2025
+ERROR: Failed to initialize GLFW
+

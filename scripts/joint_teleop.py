@@ -47,7 +47,7 @@ class JointTeleop(Node):
     def __init__(self):
         super().__init__('joint_teleop')
         self.publisher_ = self.create_publisher(Float64MultiArray, '/joint_impedance/joints_desired', 10)
-        self.timer_ = self.create_timer(0.05, self.timer_callback)
+        self.timer_ = self.create_timer(0.005, self.timer_callback)
         self.get_logger().info("Use Q/A, W/S, ..., U/J to move joints 1–7")
         self.get_logger().info("Press Ctrl+C to quit")
 

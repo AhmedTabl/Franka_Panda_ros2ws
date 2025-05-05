@@ -95,6 +95,7 @@ def generate_launch_description():
     
 
     return LaunchDescription([
+        
         # Launch args
         DeclareLaunchArgument(
             use_rviz_param,
@@ -123,13 +124,14 @@ def generate_launch_description():
 
             }.items()
         ),
+        
 
         # Miscellaneous
         node_robot_state_publisher,
         node_joint_state_publisher,
 
         Node( # RVIZ dependency
-            package='controller_manager',
+            package='controller_manager', 
             executable='spawner',
             arguments=['joint_state_broadcaster', '-c', concatenate_ns(ns, 'controller_manager', True)],
             output='screen',
