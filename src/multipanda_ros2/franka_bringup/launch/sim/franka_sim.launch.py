@@ -7,8 +7,8 @@ from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 from math import pi
 import os
-
 import xacro
+
 def concatenate_ns(ns1, ns2, absolute=False):
     
     if(len(ns1) == 0):

@@ -17,7 +17,7 @@ class CartesianKeyboardController(Node):
 
         self.publisher_ = self.create_publisher(Float64MultiArray, '/cartesian_impedance/pose_desired', 10)
 
-        self.position = np.array([-0.3, 0.04, 0.5], dtype=np.float64)
+        self.position = np.array([0.0, 1.571, 0.785 ], dtype=np.float64)
         initial_roll_deg = 166.0
         r = R.from_euler('x', initial_roll_deg, degrees=True)  # roll about X axis
         self.orientation = r.as_matrix()
