@@ -74,6 +74,7 @@ def generate_launch_description():
         parameters=[params]
     )
 
+
     # Joint state publisher setup
     jsp_source_list = [concatenate_ns(ns, 'joint_states', True)]
     if(load_gripper):
@@ -124,7 +125,7 @@ def generate_launch_description():
 
             }.items()
         ),
-        
+    
 
         # Miscellaneous
         node_robot_state_publisher,
