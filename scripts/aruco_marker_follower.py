@@ -17,8 +17,8 @@ class ArucoMarkerFollower(Node):
         self.publisher_ = self.create_publisher(Float64MultiArray, '/cartesian_impedance/pose_desired', 10)
 
         # OpenCV setup
-        self.cap = cv2.VideoCapture(1)  # Change to your camera ID if needed
-        self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+        self.cap = cv2.VideoCapture(0)  # Change to your camera ID if needed
+        self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_1000)
         self.aruco_params = cv2.aruco.DetectorParameters()
         self.camera_matirx = np.array(((9.249796138176930071e+02, 0, 3.381357122676608356e+02),(0,9.246916577452374213e+02, 2.177988860666487199e+02),(0,0,1)))
         self.distortion_coeff = np.array((-4.612486733002377388e-03,-8.481694671573700717,6.661624888698883251e-03,-4.659576407542749023e-03, 4.277086795155930332e+01))
@@ -28,16 +28,67 @@ class ArucoMarkerFollower(Node):
         self.y_buffer = []
         self.z_buffer = []
         self.buffer_size = 5  # Moving average window size
-        self.threshold = 0.005  # Maximum allowable change
+        self.transform_threshold = 0.003  # Maximum allowable change in xyz EE position
         self.prev_x = None
         self.prev_y = None
         self.prev_z = None
+        self.prev_orientation = None
+
         
         # Timer to continuously read camera feed
         self.timer = self.create_timer(0.05, self.tracker)
         self.get_logger().info("Aruco Marker Follower Initialized.")
 
+    def tracker(self):
+        ret, img = self.cap.read()
+        
+        output = self.pose_estimation(img)
 
+        cv2.imshow('Estimated Pose', output)
+
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            self.destroy_node()
+    
+    def pose_estimation(self, frame):
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        corners, ids, rejected_img_points = cv2.aruco.detectMarkers(gray, self.aruco_dict, parameters=self.aruco_params)
+
+        if len(corners) > 0:
+            for i in range(0, len(ids)):
+                # Check the size of the detected marker
+                marker_size = cv2.contourArea(corners[i])
+                if marker_size < 4000:  # threshold for marker size
+                    self.get_logger().warn(f"Rejected marker with size {marker_size}")
+                    continue  # Skip this marker
+
+                rvec, tvec, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners[i], 0.02, self.camera_matirx, self.distortion_coeff)
+                raw_x = tvec[0][0][0]
+                raw_y = tvec[0][0][1]
+                raw_z = tvec[0][0][2]
+
+                # Apply threshold filter to raw ArUco marker positions
+                filtered_x = self.threshold_filter(self.prev_x, raw_x)
+                filtered_y = self.threshold_filter(self.prev_y, raw_y)
+                filtered_z = self.threshold_filter(self.prev_z, raw_z)
+
+                # Update previous values
+                self.prev_x, self.prev_y, self.prev_z = filtered_x, filtered_y, filtered_z
+
+                # Convert rotation vector to a rotation matrix
+                rotation_matrix, _ = cv2.Rodrigues(rvec)
+                rotation_flattened = rotation_matrix.flatten().tolist()
+
+                # Draw detected markers and axes
+                cv2.aruco.drawDetectedMarkers(frame, corners)
+                cv2.drawFrameAxes(frame, self.camera_matirx, self.distortion_coeff, rvec, tvec, 0.01)
+
+                # Publish the filtered ArUco marker positions
+                self.publish_target(filtered_x, filtered_y, filtered_z, rotation_flattened)
+
+        return frame
+    
     def moving_average(self, buffer, new_value):
         """
         Applies a moving average filter to smooth the input.
@@ -53,52 +104,11 @@ class ArucoMarkerFollower(Node):
         """
         if prev_value is None:
             return new_value  # Initialize with the first value
-        if abs(new_value - prev_value) > self.threshold:
+        if abs(new_value - prev_value) > self.transform_threshold:
             return prev_value  # Ignore sudden jump
         return new_value
     
-    def pose_estimation(self, frame):
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        cv2.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
-        parameters = cv2.aruco.DetectorParameters()
-
-        corners, ids, rejected_img_points = cv2.aruco.detectMarkers(gray, cv2.aruco_dict, parameters=parameters)
-
-            
-        if len(corners) > 0:
-            for i in range(0, len(ids)):
-            
-                rvec, tvec, markerPoints = cv2.aruco.estimatePoseSingleMarkers(corners[i], 0.02, self.camera_matirx, self.distortion_coeff)
-                x = tvec[0][0][0]
-                y = tvec[0][0][1]
-                z = tvec[0][0][2]
-
-
-                cv2.aruco.drawDetectedMarkers(frame, corners) 
-
-                cv2.drawFrameAxes(frame, self.camera_matirx, self.distortion_coeff, rvec, tvec, 0.01) 
-
-                # Convert rotation vector to a rotation matrix
-                rotation_matrix, _ = cv2.Rodrigues(rvec)
-                
-                # Flatten the rotation matrix and append it to the message
-                rotation_flattened = rotation_matrix.flatten().tolist()
-                self.publish_target(x,y,z,rotation_flattened)
-
-        return frame
-
-    
-    def tracker(self):
-        ret, img = self.cap.read()
-        
-        output = self.pose_estimation(img)
-
-        cv2.imshow('Estimated Pose', output)
-
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'):
-            self.destroy_node()
 
     #Maps the aruco marker position to the end-effector position and publishes it
     def publish_target(self, x, y, z, orientation):
@@ -114,18 +124,10 @@ class ArucoMarkerFollower(Node):
 
 
     def map_to_ee(self, x, y, z):
-        # Apply threshold filter
-        filtered_x = self.threshold_filter(self.prev_x, x)
-        filtered_y = self.threshold_filter(self.prev_y, y)
-        filtered_z = self.threshold_filter(self.prev_z, z)
-
-        # Update previous values
-        self.prev_x, self.prev_y, self.prev_z = filtered_x, filtered_y, filtered_z
-
         # Apply moving average filter
-        smoothed_x = self.moving_average(self.x_buffer, filtered_x)
-        smoothed_y = self.moving_average(self.y_buffer, filtered_y)
-        smoothed_z = self.moving_average(self.z_buffer, filtered_z)
+        smoothed_x = self.moving_average(self.x_buffer, x)
+        smoothed_y = self.moving_average(self.y_buffer, y)
+        smoothed_z = self.moving_average(self.z_buffer, z)
 
         # Map X
         mapped_x = (smoothed_x - (-0.03)) / (0.03 - (-0.03)) * (0.7 - (-0.7)) + (-0.7)
