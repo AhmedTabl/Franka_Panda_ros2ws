@@ -78,7 +78,17 @@ class ArucoMarkerFollower(Node):
 
                 # Convert rotation vector to a rotation matrix
                 rotation_matrix, _ = cv2.Rodrigues(rvec)
-                rotation_flattened = rotation_matrix.flatten().tolist()
+                
+                # Remap the rotation axes
+                # Swap Y-axis (row 1) with X-axis (row 0)
+                remapped_rotation_matrix = np.array([
+                    -rotation_matrix[1],  # Y-axis becomes X-axis
+                    rotation_matrix[0],  # X-axis becomes Y-axis
+                    rotation_matrix[2]   # Z-axis remains Z-axis
+                ])
+
+                # Flatten the remapped rotation matrix
+                rotation_flattened = remapped_rotation_matrix.flatten().tolist()
 
                 # Draw detected markers and axes
                 cv2.aruco.drawDetectedMarkers(frame, corners)
