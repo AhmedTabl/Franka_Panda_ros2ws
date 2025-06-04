@@ -85,8 +85,8 @@ joint_impedance_controller:
 cartesian_impedance_controller:
   ros__parameters:
     arm_id: panda
-    k_gains: [10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]  # Lower position stiffness
-    d_gains: [11.0, 11.0, 11.0, 11.0, 11.0, 11.0, 11.0] # Calculated damping for smooth motion
+    pos_stiff: 50.0
+    rot_stiff: 10.0
 
 multi_mode_controller:
   ros__parameters:

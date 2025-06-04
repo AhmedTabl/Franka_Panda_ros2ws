@@ -27,8 +27,10 @@ class ArucoMarkerFollower(Node):
         self.x_buffer = []
         self.y_buffer = []
         self.z_buffer = []
+        self.orientation_buffer = []  # Buffer for orientation data
         self.buffer_size = 5  # Moving average window size
         self.transform_threshold = 0.003  # Maximum allowable change in xyz EE position
+        self.orientation_threshold = 0.5  # Maximum allowable change in orientation
         self.prev_x = None
         self.prev_y = None
         self.prev_z = None
@@ -59,7 +61,7 @@ class ArucoMarkerFollower(Node):
             for i in range(0, len(ids)):
                 # Check the size of the detected marker
                 marker_size = cv2.contourArea(corners[i])
-                if marker_size < 4000:  # threshold for marker size
+                if marker_size < 1000:  # threshold for marker size
                     self.get_logger().warn(f"Rejected marker with size {marker_size}")
                     continue  # Skip this marker
 
@@ -90,6 +92,20 @@ class ArucoMarkerFollower(Node):
                 # Flatten the remapped rotation matrix
                 rotation_flattened = remapped_rotation_matrix.flatten().tolist()
 
+                # Check for sudden changes in orientation
+                if self.prev_orientation is not None:
+                    orientation_change = [
+                        abs(rotation_flattened[i] - self.prev_orientation[i])
+                        for i in range(len(rotation_flattened))
+                    ]
+                    max_change = max(orientation_change)
+                    if max_change > self.orientation_threshold:  # threshold for orientation change
+                        self.get_logger().warn(f"Rejected marker due to sudden orientation change: {max_change}")
+                        continue  # Skip this marker
+
+                # Update previous orientation
+                self.prev_orientation = rotation_flattened
+                
                 # Draw detected markers and axes
                 cv2.aruco.drawDetectedMarkers(frame, corners)
                 cv2.drawFrameAxes(frame, self.camera_matirx, self.distortion_coeff, rvec, tvec, 0.01)
@@ -106,6 +122,8 @@ class ArucoMarkerFollower(Node):
         buffer.append(new_value)
         if len(buffer) > self.buffer_size:
             buffer.pop(0)  # Remove the oldest value
+        if isinstance(new_value, list):  # Handle lists (e.g., orientation data)
+            return [sum(values) / len(values) for values in zip(*buffer)]
         return sum(buffer) / len(buffer)
 
     def threshold_filter(self, prev_value, new_value):
@@ -125,8 +143,11 @@ class ArucoMarkerFollower(Node):
 
         mapped_x, mapped_y, mapped_z = self.map_to_ee(x, y, z)
 
+        # Apply moving average filter to orientation data
+        smoothed_orientation = self.moving_average(self.orientation_buffer, orientation)
+
         # Round the orientation matrix values to 4 decimal places
-        rounded_orientation = [round(value, 4) for value in orientation]
+        rounded_orientation = [round(value, 4) for value in smoothed_orientation]
         msg = Float64MultiArray()
         msg.data = [mapped_z, mapped_x, mapped_y] + rounded_orientation + [1.0] # the x,y,z coordinates are in the order of z,x,y for the EE workspace
         self.publisher_.publish(msg)
