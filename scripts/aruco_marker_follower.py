@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
+from rclpy.action import ActionClient
+from control_msgs.action import GripperCommand
 from std_msgs.msg import Float64MultiArray
 import cv2
 import numpy as np
@@ -15,7 +17,9 @@ class ArucoMarkerFollower(Node):
 
         # Publisher to send target pose to the end-effector (Cartesian Impedance Controller)
         self.publisher_ = self.create_publisher(Float64MultiArray, '/cartesian_impedance/pose_desired', 10)
+        self.gripper_client = ActionClient(self, GripperCommand, '/panda_gripper/gripper_action')
 
+        
         # OpenCV setup
         self.cap = cv2.VideoCapture(0)  # Change to your camera ID if needed
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_1000)
@@ -41,6 +45,13 @@ class ArucoMarkerFollower(Node):
         self.timer = self.create_timer(0.05, self.tracker)
         self.get_logger().info("Aruco Marker Follower Initialized.")
 
+    def send_gripper_command(self, position, max_effort=20.0):
+        goal_msg = GripperCommand.Goal()
+        goal_msg.command.position = position
+        goal_msg.command.max_effort = max_effort
+        self.gripper_client.wait_for_server()
+        self.gripper_client.send_goal_async(goal_msg)
+    
     def tracker(self):
         ret, img = self.cap.read()
         
