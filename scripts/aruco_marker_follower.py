@@ -2,7 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
-from control_msgs.action import GripperCommand
+from franka_msgs.action import Move
 from std_msgs.msg import Float64MultiArray
 import cv2
 import numpy as np
@@ -17,7 +17,12 @@ class ArucoMarkerFollower(Node):
 
         # Publisher to send target pose to the end-effector (Cartesian Impedance Controller)
         self.publisher_ = self.create_publisher(Float64MultiArray, '/cartesian_impedance/pose_desired', 10)
-        self.gripper_client = ActionClient(self, GripperCommand, '/panda_gripper/gripper_action')
+        
+        #Action client for the gripper
+        self.gripper_client = ActionClient(self, Move, '/panda_gripper/move')
+        self.gripper_open = True  # Track open/close state for spacebar toggle
+        self.gripper_width = 0.04  # Current width (meters), 0.04 is fully open
+        self.gripper_step = 0.005  # Step size for arrow key control
 
         
         # OpenCV setup
@@ -45,22 +50,49 @@ class ArucoMarkerFollower(Node):
         self.timer = self.create_timer(0.05, self.tracker)
         self.get_logger().info("Aruco Marker Follower Initialized.")
 
-    def send_gripper_command(self, position, max_effort=20.0):
-        goal_msg = GripperCommand.Goal()
-        goal_msg.command.position = position
-        goal_msg.command.max_effort = max_effort
+    def send_gripper_command(self, width, speed=0.1):
+        goal_msg = Move.Goal()
+        goal_msg.width = width  # meters, e.g., 0.04 for 4cm open
+        goal_msg.speed = speed  # meters/second
         self.gripper_client.wait_for_server()
         self.gripper_client.send_goal_async(goal_msg)
-    
+
     def tracker(self):
         ret, img = self.cap.read()
-        
         output = self.pose_estimation(img)
-
         cv2.imshow('Estimated Pose', output)
 
         key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'):
+        # Spacebar toggles open/close
+        if key == ord(' '):
+            if self.gripper_open:
+                self.gripper_width = 0.0  # Fully closed
+            else:
+                self.gripper_width = 0.08  # Fully open
+            self.send_gripper_command(self.gripper_width)
+            self.gripper_open = not self.gripper_open
+            self.get_logger().info(f"Gripper width set to: {self.gripper_width:.3f} m")
+            time.sleep(0.2)  # Debounce to avoid rapid toggling
+
+        # Left arrow (open incrementally)
+        elif key == 81:  # Left arrow key code in OpenCV
+            self.gripper_width = min(self.gripper_width + self.gripper_step, 0.08)
+            self.send_gripper_command(self.gripper_width)
+            self.gripper_open = self.gripper_width > 0.0
+            self.get_logger().info(f"Gripper width set to: {self.gripper_width:.3f} m")
+            time.sleep(0.01)  # Debounce
+
+        # Right arrow (close incrementally)
+        elif key == 83:  # Right arrow key code in OpenCV
+            self.gripper_width = max(self.gripper_width - self.gripper_step, 0.0)
+            self.send_gripper_command(self.gripper_width)
+            if self.gripper_width == 0.0:
+                self.gripper_open = False
+            self.get_logger().info(f"Gripper width set to: {self.gripper_width:.3f} m")
+            time.sleep(0.01)  # Debounce
+
+        # Quit
+        elif key == ord('q'):
             self.destroy_node()
     
     def pose_estimation(self, frame):
