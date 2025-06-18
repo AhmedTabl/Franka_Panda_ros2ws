@@ -174,6 +174,9 @@ CallbackReturn CartesianImpedanceController::on_init() {
       )
     );
 
+    param_callback_handle_ = get_node()->add_on_set_parameters_callback(
+      std::bind(&CartesianImpedanceController::parameter_callback, this, std::placeholders::_1));
+
   
   } catch (const std::exception& e) {
     // Error handling: If any exception is thrown during initialization, it will print the error message
@@ -201,9 +204,7 @@ CallbackReturn CartesianImpedanceController::on_configure(
   // Retrieving the value of the "rot_stiff" (rotation stiffness) parameter
   rot_stiff = get_node()->get_parameter("rot_stiff").as_double();
 
-  // Register parameter callback
-  get_node()->add_on_set_parameters_callback(
-    std::bind(&CartesianImpedanceController::parameter_callback, this, std::placeholders::_1));
+
   
   // Initializing the Franka Robot Model (a specialized class for handling the robot model in the controller)
   // This uses the robot model defined by the parameter "arm_id_/robot_model"
@@ -276,24 +277,26 @@ CallbackReturn CartesianImpedanceController::on_deactivate(
 }
 
 rcl_interfaces::msg::SetParametersResult CartesianImpedanceController::parameter_callback(
-  const std::vector<rclcpp::Parameter>& parameters) {
-for (const auto& param : parameters) {
-  if (param.get_name() == "pos_stiff") {
-    pos_stiff = param.as_double();
-    stiffness.topLeftCorner(3, 3) << pos_stiff * Eigen::Matrix3d::Identity();
-    damping.topLeftCorner(3, 3) << 2 * sqrt(pos_stiff) * Eigen::Matrix3d::Identity();
-    RCLCPP_INFO(get_node()->get_logger(), "Updated pos_stiff to %f", pos_stiff);
-  } else if (param.get_name() == "rot_stiff") {
-    rot_stiff = param.as_double();
-    stiffness.bottomRightCorner(3, 3) << rot_stiff * Eigen::Matrix3d::Identity();
-    damping.bottomRightCorner(3, 3) << 0.8 * 2 * sqrt(rot_stiff) * Eigen::Matrix3d::Identity();
-    RCLCPP_INFO(get_node()->get_logger(), "Updated rot_stiff to %f", rot_stiff);
+    const std::vector<rclcpp::Parameter>& parameters) {
+  
+  fprintf(stderr, "Parameter callback called with %zu parameters.\n", parameters.size());
+  for (const auto& param : parameters) {
+    if (param.get_name() == "pos_stiff") {
+      pos_stiff = param.as_double();
+      stiffness.topLeftCorner(3, 3) = pos_stiff * Matrix3d::Identity();
+      damping.topLeftCorner(3, 3) = 2 * sqrt(pos_stiff) * Matrix3d::Identity();
+    }
+    if (param.get_name() == "rot_stiff") {
+      rot_stiff = param.as_double();
+      stiffness.bottomRightCorner(3, 3) = rot_stiff * Matrix3d::Identity();
+      damping.bottomRightCorner(3, 3) = 0.8 * 2 * sqrt(rot_stiff) * Matrix3d::Identity();
+    }
   }
-}
   rcl_interfaces::msg::SetParametersResult result;
   result.successful = true;
   return result;
 }
+
 
 // This function is the callback that is triggered whenever a new message is published
 // to the /cartesian_impedance/pose_desired topic. It updates the target position
