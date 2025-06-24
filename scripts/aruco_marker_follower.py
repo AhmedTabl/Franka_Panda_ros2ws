@@ -142,8 +142,15 @@ class ArucoMarkerFollower(Node):
                     rotation_matrix[2]   # Z-axis remains Z-axis
                 ])
 
+                # --- Add a -90 degree rotation around Z (palm normal) ---
+                # Create a rotation of -90 degrees (in radians) about Z
+                z_offset = R.from_euler('z', -90, degrees=True)
+        
+                # Compose it with the remapped rotation
+                final_rot = z_offset * R.from_matrix(remapped_rotation_matrix)
+
                 # Flatten the remapped rotation matrix
-                rotation_flattened = remapped_rotation_matrix.flatten().tolist()
+                rotation_flattened = final_rot.flatten().tolist()
 
                 # Kalman filter for orientation (element-wise)
                 filtered_orientation = [

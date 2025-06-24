@@ -6,9 +6,9 @@ from franka_msgs.action import Move
 from std_msgs.msg import Float64MultiArray
 import cv2
 import numpy as np
-import sys
 import time
 import mediapipe as mp
+from scipy.spatial.transform import Rotation as R, Slerp
 
 class SimpleKalmanFilter:
     def __init__(self, process_noise, measurement_noise):
@@ -41,8 +41,11 @@ class HandFollower(Node):
             self.gripper_client = ActionClient(self, Move, '/panda_gripper/move')
         
         self.gripper_open = True
-        self.gripper_width = 0.04
+        self.gripper_width = 0.08
         self.gripper_step = 0.005
+
+        self.prev_quat = None
+        self.quat_alpha = 0.15  # Smoothing factor (0=slow, 1=fast)
 
         self.cap = cv2.VideoCapture(0)
         # Camera matrix and distortion coefficients (reuse from aruco script)
@@ -118,26 +121,109 @@ class HandFollower(Node):
         elif key == ord('q'):
             self.destroy_node()
 
+
+    def compute_hand_orientation(self, landmarks):
+        # Palm center: average of wrist, index, middle, ring, pinky MCPs
+        palm_pts = np.array([
+            [landmarks[0].x, landmarks[0].y, landmarks[0].z],
+            [landmarks[5].x, landmarks[5].y, landmarks[5].z],
+            [landmarks[9].x, landmarks[9].y, landmarks[9].z],
+            [landmarks[13].x, landmarks[13].y, landmarks[13].z],
+            [landmarks[17].x, landmarks[17].y, landmarks[17].z],
+        ])
+        palm_center = palm_pts.mean(axis=0)
+        index = np.array([landmarks[5].x, landmarks[5].y, landmarks[5].z])
+        pinky = np.array([landmarks[17].x, landmarks[17].y, landmarks[17].z])
+        middle = np.array([landmarks[9].x, landmarks[9].y, landmarks[9].z])
+
+        # X axis: index to pinky (across palm)
+        x_axis = pinky - index
+        x_axis /= np.linalg.norm(x_axis) if np.linalg.norm(x_axis) > 0 else 1
+        # Y axis: palm center to middle finger MCP
+        y_axis = middle - palm_center
+        y_axis /= np.linalg.norm(y_axis) if np.linalg.norm(y_axis) > 0 else 1
+        # Z axis: normal to palm (right-handed)
+        z_axis = np.cross(x_axis, y_axis)
+        z_axis /= np.linalg.norm(z_axis) if np.linalg.norm(z_axis) > 0 else 1
+
+        # Compose rotation matrix (columns are axes)
+        rotation_matrix = np.stack([x_axis, y_axis, z_axis], axis=1)  # 3x3
+
+        # Remap the rotation axes as in ArUco script
+        remapped_rotation_matrix = np.array([
+            -rotation_matrix[1],  # Y-axis becomes X-axis
+            rotation_matrix[0],   # X-axis becomes Y-axis
+            rotation_matrix[2]    # Z-axis remains Z-axis
+        ])
+        
+        # --- Add a -90 degree rotation around Z (palm normal) ---
+        # Create a rotation of -90 degrees (in radians) about Z
+        z_offset = R.from_euler('z', -90, degrees=True)
+        
+        # Compose it with the remapped rotation
+        final_rot = z_offset * R.from_matrix(remapped_rotation_matrix)
+        quat = final_rot.as_quat()  # [x, y, z, w]
+        
+        # Smooth quaternion
+        smoothed_quat = self.smooth_quaternion(quat)
+        
+        # Convert back to rotation matrix
+        smoothed_matrix = R.from_quat(smoothed_quat).as_matrix()
+        rotation_flattened = smoothed_matrix.flatten().tolist()
+        return rotation_flattened, palm_center
+
     def hand_pose_estimation(self, frame, results):
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
                 h, w, _ = frame.shape
-                wrist = hand_landmarks.landmark[0]
-                cx, cy = int(wrist.x * w), int(wrist.y * h)
-                z = -wrist.z  # MediaPipe z is negative towards camera
+                # Use palm center for position
+                rotation_flattened, palm_center = self.compute_hand_orientation(hand_landmarks.landmark)
+                cx, cy = int(palm_center[0] * w), int(palm_center[1] * h)
+                z = -palm_center[2]  # MediaPipe z is negative towards camera
 
                 # Kalman filter for position
                 filtered_x = self.kalman_x.update(cx)
                 filtered_y = self.kalman_y.update(cy)
                 filtered_z = self.kalman_z.update(z)
 
-                # Compute orientation using landmarks
-                orientation_matrix = self.compute_hand_orientation(hand_landmarks.landmark)
-                orientation_flat = orientation_matrix.flatten()
+                # Kalman filter for orientation (element-wise)
                 filtered_orientation = [
-                    self.kalman_orientation[i].update(orientation_flat[i])
+                    self.kalman_orientation[i].update(rotation_flattened[i])
                     for i in range(9)
                 ]
+
+                # --- Pinch-based gripper control ---
+                index_tip = hand_landmarks.landmark[8]
+                thumb_tip = hand_landmarks.landmark[4]
+                # Calculate Euclidean distance in image space
+                pinch_dist = np.linalg.norm(
+                    np.array([index_tip.x - thumb_tip.x, index_tip.y - thumb_tip.y])
+                )
+                self.get_logger().info(f"Pinch distance: {pinch_dist:.3f}")
+                # Map pinch distance to gripper width (tune min/max as needed)
+                min_pinch = 0.04  # adjust as needed
+                max_pinch = 0.3  # adjust as needed
+                min_width = 0.0
+                max_width = 0.08
+                # Clamp and map
+                pinch_dist_clamped = np.clip(pinch_dist, min_pinch, max_pinch)
+                gripper_width = ((pinch_dist_clamped - min_pinch) / (max_pinch - min_pinch)) * (max_width - min_width)
+                gripper_width = np.clip(gripper_width, min_width, max_width)
+                # Only send if changed significantly to avoid spamming
+                if abs(gripper_width - self.gripper_width) > 0.001:
+                    self.send_gripper_command(gripper_width)
+                    self.gripper_width = gripper_width
+
+                # Draw landmarks and pinch line
+                self.mp_drawing.draw_landmarks(
+                    frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS,
+                    self.mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
+                    self.mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2),
+                )
+                ix, iy = int(index_tip.x * w), int(index_tip.y * h)
+                tx, ty = int(thumb_tip.x * w), int(thumb_tip.y * h)
+                cv2.line(frame, (ix, iy), (tx, ty), (0, 255, 0), 2)
+                cv2.putText(frame, f"Gripper: {gripper_width:.3f}m", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
 
                 # Draw landmarks
                 self.mp_drawing.draw_landmarks(
@@ -145,39 +231,35 @@ class HandFollower(Node):
                     self.mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
                     self.mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2),
                 )
-                cv2.circle(frame, (cx, cy), 7, (255,0,0), -1)
-                cv2.putText(frame, "Wrist", (cx, cy-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
+                cv2.circle(frame, (cx, cy), 7, (0,255,255), -1)
+                cv2.putText(frame, "Palm Center", (cx, cy-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
 
                 # Publish the filtered hand position
                 self.publish_target(filtered_x, filtered_y, filtered_z, filtered_orientation)
                 break  # Only use the first detected hand
         return frame
 
-    def compute_hand_orientation(self, landmarks):
-        wrist = np.array([landmarks[0].x, landmarks[0].y, landmarks[0].z])
-        middle = np.array([landmarks[9].x, landmarks[9].y, landmarks[9].z])
-        index = np.array([landmarks[5].x, landmarks[5].y, landmarks[5].z])
-        pinky = np.array([landmarks[17].x, landmarks[17].y, landmarks[17].z])
-
-        x_axis = pinky - index
-        y_axis = middle - wrist
-        z_axis = np.cross(x_axis, y_axis)
-
-        # Normalize axes
-        x_axis /= np.linalg.norm(x_axis) if np.linalg.norm(x_axis) > 0 else 1
-        y_axis /= np.linalg.norm(y_axis) if np.linalg.norm(y_axis) > 0 else 1
-        z_axis /= np.linalg.norm(z_axis) if np.linalg.norm(z_axis) > 0 else 1
-
-        R = np.stack([-y_axis, x_axis, z_axis], axis=1)  # 3x3 rotation matrix
-        return R
-
+    def smooth_quaternion(self, quat):
+        if self.prev_quat is None:
+            self.prev_quat = quat
+            return quat
+        prev_r = R.from_quat(self.prev_quat)
+        curr_r = R.from_quat(quat)
+        # Slerp expects key times and a Rotation object array
+        key_times = [0, 1]
+        rotations = R.from_quat([self.prev_quat, quat])
+        slerp = Slerp(key_times, rotations)
+        smoothed_r = slerp([self.quat_alpha])[0]
+        smoothed_quat = smoothed_r.as_quat()
+        self.prev_quat = smoothed_quat
+        return smoothed_quat
+    
     def publish_target(self, x, y, z, orientation):
         mapped_x, mapped_y, mapped_z = self.map_to_ee(x, y, z)
-        rounded_orientation = [round(value, 4) for value in orientation]
         msg = Float64MultiArray()
-        msg.data = [mapped_z, mapped_x, mapped_y] + rounded_orientation + [1.0]
+        msg.data = [mapped_z, mapped_x, mapped_y] + orientation + [1.0]
         self.publisher_.publish(msg)
-        self.get_logger().info(f"Publishing target: x={mapped_x}, y={mapped_y}, z={mapped_z}, orientation={rounded_orientation}")
+        self.get_logger().info(f"Publishing target: x={mapped_x}, y={mapped_y}, z={mapped_z}, orientation={orientation}")
 
     def map_to_ee(self, x, y, z):
         # Map image coordinates to EE workspace (tune as needed)
