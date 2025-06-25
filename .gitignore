@@ -1,5 +1,6 @@
 build/
 install/
 log/
+venv/
 *.pyc
 __pycache__/
