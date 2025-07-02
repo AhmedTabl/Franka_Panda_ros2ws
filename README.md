@@ -74,10 +74,11 @@ ros2_ws/
 - **Build the workspace:**
   ```bash
   cd ~/ros2_ws
-  colcon build --symlink-install
+  colcon build
   source install/setup.bash
   ```
 - **Launch the main GUI:**
+  > **Tip:** It is recommended to run the GUI in a Python virtual environment (venv) to avoid conflicts between PyQt5 and OpenCV versions installed system-wide and those required by the scripts.
   ```bash
   python3 scripts/hand_follower_gui.py
   ```
@@ -92,7 +93,7 @@ The main script, `hand_follower_gui.py`, provides:
 - Live camera feed and parameter editing in a PyQt5 GUI
 - ROS 2 integration for controlling the Franka arm (real/sim)
 - Gripper control via pinch gesture
-- Safety: position jump filtering, error messages for connection issues, etc.
+- Safety: position jump filtering, error messages for connection issues
 
 **Example:**  
 
