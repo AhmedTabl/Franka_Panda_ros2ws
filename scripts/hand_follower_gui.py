@@ -25,6 +25,10 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 from std_msgs.msg import Float64MultiArray
 from franka_msgs.action import Move
+from franka_msgs.srv import SetForceTorqueCollisionBehavior
+from rcl_interfaces.srv import SetParameters
+from rcl_interfaces.msg import Parameter, ParameterValue
+from rclpy.parameter import Parameter as RclpyParameter
 
 # -----------------------------
 # Simple Kalman Filter for Smoothing
@@ -51,12 +55,12 @@ class HandFollowerNode(Node):
         
         # Declare and get parameters for workspace mapping and simulation mode
         self.declare_parameter('sim_arm', True)
-        self.declare_parameter('ee_x_min', -0.7)
-        self.declare_parameter('ee_x_max', 0.7)
-        self.declare_parameter('ee_y_min', 1.1)
-        self.declare_parameter('ee_y_max', 0.125)
-        self.declare_parameter('ee_z_min', 0.4)
-        self.declare_parameter('ee_z_max', 1.2)
+        self.declare_parameter('ee_x_min', -1.0)
+        self.declare_parameter('ee_x_max', 1.0)
+        self.declare_parameter('ee_y_min', 1.5)
+        self.declare_parameter('ee_y_max', -1.0)
+        self.declare_parameter('ee_z_min', -0.7)
+        self.declare_parameter('ee_z_max', 3.0)
 
         self.sim_arm = self.get_parameter('sim_arm').get_parameter_value().bool_value
         self.ee_x_min = self.get_parameter('ee_x_min').get_parameter_value().double_value
@@ -74,16 +78,24 @@ class HandFollowerNode(Node):
         else:
             self.gripper_client = ActionClient(self, Move, '/panda_gripper/move')
         
-        self.gripper_open = True
-        self.gripper_width = 0.08
-        self.gripper_step = 0.005
+        # Add service client for force/torque threshold
+        self.collision_srv = self.create_client(SetForceTorqueCollisionBehavior, '/panda_param_service_server/set_force_torque_collision_behavior')
         
+        # Add client for cartesian_impedance_controller parameter setting
+        self.cartesian_param_srv = self.create_client(
+            SetParameters,
+            '/cartesian_impedance_controller/set_parameters')
+        
+        self.gripper_open = True
+        self.gripper_width = 0.04
+        self.gripper_step = 0.01
         # Smoothing filters
         self.prev_quat = None
         self.quat_alpha = 0.15
-        self.kalman_x = SimpleKalmanFilter(1e-5, 1e-2)
-        self.kalman_y = SimpleKalmanFilter(1e-5, 1e-2)
-        self.kalman_z = SimpleKalmanFilter(1e-5, 1e-2)
+        # Make Kalman filters more responsive to small changes
+        self.kalman_x = SimpleKalmanFilter(1e-2, 1e-4)
+        self.kalman_y = SimpleKalmanFilter(1e-2, 1e-4)
+        self.kalman_z = SimpleKalmanFilter(1e-2, 1e-4)
         self.kalman_orientation = [SimpleKalmanFilter(1e-6, 1e-2) for _ in range(9)]
         
         # MediaPipe setup for hand tracking
@@ -93,14 +105,26 @@ class HandFollowerNode(Node):
         self.gui_callback = gui_callback
         self.last_frame = None
         self.last_info = ""
+        self.last_error = ""  # Initialize last_error for gripper command feedback
+        self.last_cartesian_error = ""
+        self.last_sent_pos = None  # For position jump filtering
+        self.position_jump_threshold = 0.7  # meters, adjust as needed
     
     # Send gripper command via ROS2 action
     def send_gripper_command(self, width, speed=0.1):
         goal_msg = Move.Goal()
         goal_msg.width = width
         goal_msg.speed = speed
-        self.gripper_client.wait_for_server()
+        # Try to wait for the correct action server, else set error for GUI
+        if not self.gripper_client.wait_for_server(timeout_sec=1.0):
+            if self.sim_arm:
+                self.last_error = "[ERROR] Sim arm selected, but sim gripper action server not available.\nCheck if simulation is running and sim_arm is checked."
+            else:
+                self.last_error = "[ERROR] Real arm selected, but real gripper action server not available.\nCheck if real robot is running and sim_arm is unchecked."
+            return False
+        self.last_error = ""  # Clear error if successful
         self.gripper_client.send_goal_async(goal_msg)
+        return True
     
     # Process a camera frame: detect hand and update pose
     def process_frame(self, img):
@@ -166,8 +190,8 @@ class HandFollowerNode(Node):
                     self.kalman_orientation[i].update(rotation_flattened[i])
                     for i in range(9)
                 ]
-                
-                # --- Pinch-based gripper control ---
+
+                # --- Pinch-based gripper control (binary open/close) ---
                 index_tip = hand_landmarks.landmark[8]
                 thumb_tip = hand_landmarks.landmark[4]
                 # Calculate Euclidean distance in image space
@@ -175,36 +199,36 @@ class HandFollowerNode(Node):
                     np.array([index_tip.x - thumb_tip.x, index_tip.y - thumb_tip.y])
                 )
                 info += f"Pinch distance: {pinch_dist:.3f}\n"
-                
-                min_pinch = 0.04
-                max_pinch = 0.3
+
+                pinch_threshold = 0.10  # You can tune this value
                 min_width = 0.0
                 max_width = 0.08
-                pinch_dist_clamped = np.clip(pinch_dist, min_pinch, max_pinch)
-                gripper_width = ((pinch_dist_clamped - min_pinch) / (max_pinch - min_pinch)) * (max_width - min_width)
-                gripper_width = np.clip(gripper_width, min_width, max_width)
-                
+                if pinch_dist < pinch_threshold:
+                    gripper_width = min_width  # Fully close
+                else:
+                    gripper_width = max_width  # Fully open
+
                 # Only send if changed significantly to avoid spamming
-                if abs(gripper_width - self.gripper_width) > 0.001:
+                if abs(gripper_width - self.gripper_width) > 0.01:
                     self.send_gripper_command(gripper_width)
                     self.gripper_width = gripper_width
-                
+
                 self.mp_drawing.draw_landmarks(
                     frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS,
                     self.mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
                     self.mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2),
                 )
-                
+
                 ix, iy = int(index_tip.x * w), int(index_tip.y * h)
                 tx, ty = int(thumb_tip.x * w), int(thumb_tip.y * h)
-                
+
                 cv2.line(frame, (ix, iy), (tx, ty), (0, 255, 0), 2)
-                cv2.putText(frame, f"Gripper: {gripper_width:.3f}m", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
+                cv2.putText(frame, f"Gripper: {'Closed' if gripper_width == min_width else 'Open'}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
                 cv2.circle(frame, (cx, cy), 7, (0,255,255), -1)
                 cv2.putText(frame, "Palm Center", (cx, cy-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
-                
+
                 self.publish_target(filtered_x, filtered_y, filtered_z, filtered_orientation)
-                info += f"Gripper width: {gripper_width:.3f} m\n"
+                info += f"Gripper: {'Closed' if gripper_width == min_width else 'Open'}\n"
                 break
         self.last_info = info
         return frame
@@ -225,6 +249,14 @@ class HandFollowerNode(Node):
     # Publish the target pose to the robot
     def publish_target(self, x, y, z, orientation):
         mapped_x, mapped_y, mapped_z = self.map_to_ee(x, y, z)
+        # Position jump filter
+        current_pos = np.array([mapped_x, mapped_y, mapped_z])
+        if self.last_sent_pos is not None:
+            jump = np.linalg.norm(current_pos - self.last_sent_pos)
+            if jump > self.position_jump_threshold:
+                self.get_logger().warn(f"[SAFETY] Position jump ({jump:.3f} m) exceeds threshold. Command not sent.")
+                return
+        self.last_sent_pos = current_pos
         msg = Float64MultiArray()
         msg.data = [mapped_z, mapped_x, mapped_y] + orientation + [1.0]
         self.publisher_.publish(msg)
@@ -271,6 +303,39 @@ class HandFollowerNode(Node):
         mapped_z = round(mapped_z, 3)
         return mapped_x, mapped_y, mapped_z
 
+    def set_force_torque_thresholds(self, upper_force, upper_torque):
+        # Only set upper thresholds, keep lower as None (will not be changed)
+        req = SetForceTorqueCollisionBehavior.Request()
+        req.upper_torque_thresholds_nominal = [upper_torque] * 7
+        req.upper_force_thresholds_nominal = [upper_force] * 6
+        # Leave lower thresholds as default (empty)
+        # Wait for service if needed
+        if not self.collision_srv.wait_for_service(timeout_sec=2.0):
+            self.get_logger().error('Collision behavior service not available!')
+            return False
+        future = self.collision_srv.call_async(req)
+        # Optionally, wait for result (non-blocking for GUI)
+        return True
+
+    def set_cartesian_stiffness(self, pos_stiff, rot_stiff):
+        # Try to set pos_stiff and rot_stiff parameters on the controller
+        if not self.cartesian_param_srv.wait_for_service(timeout_sec=1.0):
+            self.last_cartesian_error = (
+                '[ERROR] Cartesian Impedance Controller not running.\n'
+                'Start the controller before setting stiffness parameters.'
+            )
+            return False
+        # Prepare parameter list
+        PARAM_TYPE_DOUBLE = 3  # rcl_interfaces/msg/ParameterType: PARAMETER_DOUBLE = 3
+        req = SetParameters.Request()
+        req.parameters = [
+            Parameter(name='pos_stiff', value=ParameterValue(type=PARAM_TYPE_DOUBLE, double_value=pos_stiff)),
+            Parameter(name='rot_stiff', value=ParameterValue(type=PARAM_TYPE_DOUBLE, double_value=rot_stiff)),
+        ]
+        self.cartesian_param_srv.call_async(req)
+        self.last_cartesian_error = ""
+        return True
+
 # -----------------------------
 # PyQt5 GUI for Camera Feed and Parameter Editing
 # -----------------------------
@@ -310,13 +375,57 @@ class HandFollowerGUI(QWidget):
         self.x_max = self._make_spinbox("X Max", -2.0, 2.0, self.node.ee_x_max)
         self.y_min = self._make_spinbox("Y Min", -2.0, 2.0, self.node.ee_y_min)
         self.y_max = self._make_spinbox("Y Max", -2.0, 2.0, self.node.ee_y_max)
-        self.z_min = self._make_spinbox("Z Min", 0.0, 2.0, self.node.ee_z_min)
-        self.z_max = self._make_spinbox("Z Max", 0.0, 2.0, self.node.ee_z_max)
+        self.z_min = self._make_spinbox("Z Min", -1.0, 2.0, self.node.ee_z_min)
+        self.z_max = self._make_spinbox("Z Max", 0.0, 5.0, self.node.ee_z_max)
         
         for widget in [self.x_min, self.x_max, self.y_min, self.y_max, self.z_min, self.z_max]:
             group_layout.addLayout(widget['layout'])
         group.setLayout(group_layout)
         param_layout.addWidget(group)
+        
+        # Add force/torque threshold controls
+        threshold_group = QGroupBox("Collision Thresholds (Franka only)")
+        threshold_layout = QVBoxLayout()
+        self.force_spin = QDoubleSpinBox()
+        self.force_spin.setRange(0, 50)
+        self.force_spin.setDecimals(2)
+        self.force_spin.setSingleStep(0.1)
+        self.force_spin.setValue(20.0)
+        self.force_spin.setSuffix(' N')
+        self.torque_spin = QDoubleSpinBox()
+        self.torque_spin.setRange(0, 50)
+        self.torque_spin.setDecimals(2)
+        self.torque_spin.setSingleStep(0.1)
+        self.torque_spin.setValue(20.0)
+        self.torque_spin.setSuffix(' Nm')
+        threshold_layout.addWidget(QLabel('Upper Force Threshold (N):'))
+        threshold_layout.addWidget(self.force_spin)
+        threshold_layout.addWidget(QLabel('Upper Torque Threshold (Nm):'))
+        threshold_layout.addWidget(self.torque_spin)
+        threshold_group.setLayout(threshold_layout)
+        param_layout.addWidget(threshold_group)
+        
+        # Add cartesian impedance controller stiffness controls
+        cartesian_group = QGroupBox("Cartesian Impedance Stiffness")
+        cartesian_layout = QVBoxLayout()
+        self.pos_stiff_spin = QDoubleSpinBox()
+        self.pos_stiff_spin.setRange(0, 5000)
+        self.pos_stiff_spin.setDecimals(1)
+        self.pos_stiff_spin.setSingleStep(10)
+        self.pos_stiff_spin.setValue(10.0)
+        self.pos_stiff_spin.setSuffix(' N/m')
+        self.rot_stiff_spin = QDoubleSpinBox()
+        self.rot_stiff_spin.setRange(0, 500)
+        self.rot_stiff_spin.setDecimals(1)
+        self.rot_stiff_spin.setSingleStep(1)
+        self.rot_stiff_spin.setValue(10.0)
+        self.rot_stiff_spin.setSuffix(' Nm/rad')
+        cartesian_layout.addWidget(QLabel('Position Stiffness (pos_stiff):'))
+        cartesian_layout.addWidget(self.pos_stiff_spin)
+        cartesian_layout.addWidget(QLabel('Rotation Stiffness (rot_stiff):'))
+        cartesian_layout.addWidget(self.rot_stiff_spin)
+        cartesian_group.setLayout(cartesian_layout)
+        param_layout.addWidget(cartesian_group)
         
         self.apply_btn = QPushButton("Apply")
         self.apply_btn.clicked.connect(self.on_param_change)
@@ -325,6 +434,23 @@ class HandFollowerGUI(QWidget):
         self.info_label = QLabel()
         self.info_label.setAlignment(Qt.AlignTop)
         param_layout.addWidget(self.info_label)
+
+        # Error label for gripper command feedback
+        self.error_label = QLabel()
+        self.error_label.setStyleSheet('color: red; font-weight: bold;')
+        self.error_label.setAlignment(Qt.AlignTop)
+        self.error_label.setWordWrap(True)
+        self.error_label.setFixedWidth(220)  # Limit width to keep layout clean
+        param_layout.addWidget(self.error_label)
+
+        # Error label for cartesian controller feedback
+        self.cartesian_error_label = QLabel()
+        self.cartesian_error_label.setStyleSheet('color: red; font-weight: bold;')
+        self.cartesian_error_label.setAlignment(Qt.AlignTop)
+        self.cartesian_error_label.setWordWrap(True)
+        self.cartesian_error_label.setFixedWidth(220)
+        param_layout.addWidget(self.cartesian_error_label)
+
         main_layout.addLayout(param_layout)
         self.setLayout(main_layout)
     
@@ -351,6 +477,17 @@ class HandFollowerGUI(QWidget):
         self.node.ee_z_min = self.z_min['spinbox'].value()
         self.node.ee_z_max = self.z_max['spinbox'].value()
         
+        # Set force/torque thresholds if not sim_arm
+        if not self.node.sim_arm:
+            upper_force = self.force_spin.value()
+            upper_torque = self.torque_spin.value()
+            self.node.set_force_torque_thresholds(upper_force, upper_torque)
+        
+        # Set cartesian impedance controller parameters
+        pos_stiff = self.pos_stiff_spin.value()
+        rot_stiff = self.rot_stiff_spin.value()
+        self.node.set_cartesian_stiffness(pos_stiff, rot_stiff)
+        
         # Optionally, update ROS2 parameters as well
         self.node.set_parameters([
             rclpy.parameter.Parameter('sim_arm', rclpy.Parameter.Type.BOOL, self.node.sim_arm),
@@ -361,6 +498,9 @@ class HandFollowerGUI(QWidget):
             rclpy.parameter.Parameter('ee_z_min', rclpy.Parameter.Type.DOUBLE, self.node.ee_z_min),
             rclpy.parameter.Parameter('ee_z_max', rclpy.Parameter.Type.DOUBLE, self.node.ee_z_max),
         ])
+        # Clear error on param change
+        if hasattr(self.node, 'last_error'):
+            self.node.last_error = ""
     
     # Update the camera feed and info label
     def update_frame(self):
@@ -370,6 +510,16 @@ class HandFollowerGUI(QWidget):
         frame = self.node.process_frame(frame)
         self.display_image(frame)
         self.info_label.setText(self.node.last_info)
+        # Show error if present
+        if hasattr(self.node, 'last_error') and self.node.last_error:
+            self.error_label.setText(self.node.last_error)
+        else:
+            self.error_label.setText("")
+        # Show cartesian error if present
+        if hasattr(self.node, 'last_cartesian_error') and self.node.last_cartesian_error:
+            self.cartesian_error_label.setText(self.node.last_cartesian_error)
+        else:
+            self.cartesian_error_label.setText("")
     
     # Display the camera frame in the GUI
     def display_image(self, img):
@@ -391,7 +541,7 @@ class HandFollowerGUI(QWidget):
 # -----------------------------
 def main():
     rclpy.init()
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
     # Set a lower resolution for compatibility (optional)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
