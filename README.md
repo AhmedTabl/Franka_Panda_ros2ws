@@ -61,7 +61,16 @@ ros2_ws/
 
 ## Getting Started
 
-- **Prerequisites:** ROS 2 Humble, Python 3.8+, OpenCV, PyQt5, MediaPipe, etc.
+- **Step 1: Panda ROS 2 Configuration**
+  - Before using this workspace, you must follow the setup and configuration steps described in the [multipanda_ros2 README](src/multipanda_ros2/README.md). This ensures you have the correct ROS 2 configuration and drivers for the Franka Panda arm (real or simulation).
+
+- **Step 2: Additional Prerequisites for Scripts**
+  - Python 3.8+
+  - OpenCV
+  - PyQt5
+  - MediaPipe
+  - (Optional) Other dependencies as required by individual scripts
+
 - **Build the workspace:**
   ```bash
   cd ~/ros2_ws
@@ -85,8 +94,9 @@ The main script, `hand_follower_gui.py`, provides:
 - Gripper control via pinch gesture
 - Safety: position jump filtering, error messages for connection issues, etc.
 
-**Screenshots:**  
-_Add screenshots of the GUI in action here!_
+**Example:**  
+
+![Demo](images/franka_demo.gif)
 
 ---
 
@@ -94,7 +104,7 @@ _Add screenshots of the GUI in action here!_
 
 - **src/mujoco_ros_pkgs/**: Cloned from [ubi-agni/mujoco_ros_pkgs](https://github.com/ubi-agni/mujoco_ros_pkgs) (see their README and license).
 - **src/multipanda_ros2/**: Cloned from [tenfoldpaper/multipanda_ros2](https://github.com/tenfoldpaper/multipanda_ros2) (see their README and license).
-- **scripts/camera-calibration/**: Cloned from [original repo, e.g. github.com/someuser/camera-calibration] (see their README and license).
+- **scripts/camera-calibration/**: Cloned from [niconielsen32/camera-calibration](https://github.com/niconielsen32/camera-calibration) (see their README and license).
 
 All other scripts in `scripts/` are original work.
 
