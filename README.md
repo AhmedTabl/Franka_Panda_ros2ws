@@ -113,10 +113,13 @@ All other scripts in `scripts/` are original work.
 
 ## License
 
-This workspace is licensed under the Apache License 2.0.
-Included external packages are licensed separately:
-- mujoco_ros_pkgs: See their LICENSE.
-- multipanda_ros2: See their LICENSE.
-- camera-calibration: See their LICENSE.
+This workspace is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+
+**Included external packages are licensed separately:**
+
+- [`mujoco_ros_pkgs`](https://github.com/ubi-agni/mujoco_ros_pkgs): See their LICENSE.
+- [`multipanda_ros2`](https://github.com/tenfoldpaper/multipanda_ros2): See their LICENSE.
+- [`camera-calibration`](https://github.com/niconielsen32/camera-calibration): See their LICENSE.
 
 All other content in this repository (scripts, GUI tools, configuration) is original and released under Apache 2.0.
+
