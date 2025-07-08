@@ -113,5 +113,10 @@ All other scripts in `scripts/` are original work.
 
 ## License
 
-- This workspace: _[Your License Here, e.g. MIT, Apache 2.0, etc.]_
-- External packages are under their own licenses (see their READMEs).
+This workspace is licensed under the Apache License 2.0.
+Included external packages are licensed separately:
+- mujoco_ros_pkgs: See their LICENSE.
+- multipanda_ros2: See their LICENSE.
+- camera-calibration: See their LICENSE.
+
+All other content in this repository (scripts, GUI tools, configuration) is original and released under Apache 2.0.
