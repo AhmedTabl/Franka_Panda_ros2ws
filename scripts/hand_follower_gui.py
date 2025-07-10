@@ -103,12 +103,12 @@ class HandFollowerNode(Node):
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.5)
         self.gui_callback = gui_callback
-        self.last_frame = None
         self.last_info = ""
         self.last_error = ""  # Initialize last_error for gripper command feedback
         self.last_cartesian_error = ""
         self.last_sent_pos = None  # For position jump filtering
-        self.position_jump_threshold = 0.7  # meters, adjust as needed
+        self.position_jump_threshold = 1.0  # meters, adjust as needed
+        self.armed = False  # For enable/disable button
     
     # Send gripper command via ROS2 action
     def send_gripper_command(self, width, speed=0.1):
@@ -173,60 +173,107 @@ class HandFollowerNode(Node):
         smoothed_matrix = R.from_quat(smoothed_quat).as_matrix()
         rotation_flattened = smoothed_matrix.flatten().tolist()
         return rotation_flattened, palm_center
-    
+
+    def set_armed(self, armed):
+        self.armed = armed
+
     # Main hand pose estimation and gripper logic
     def hand_pose_estimation(self, frame, results):
         info = ""
+        if not self.armed:
+            info += "[INFO] Hand tracking is disarmed.\n"
+            self.last_info = info
+            return frame
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
                 h, w, _ = frame.shape
                 rotation_flattened, palm_center = self.compute_hand_orientation(hand_landmarks.landmark)
                 cx, cy = int(palm_center[0] * w), int(palm_center[1] * h)
-                z = -palm_center[2]
-                filtered_x = self.kalman_x.update(cx)
-                filtered_y = self.kalman_y.update(cy)
-                filtered_z = self.kalman_z.update(z)
-                filtered_orientation = [
-                    self.kalman_orientation[i].update(rotation_flattened[i])
-                    for i in range(9)
-                ]
-
+                z_raw = -palm_center[2]
                 # --- Pinch-based gripper control (binary open/close) ---
                 index_tip = hand_landmarks.landmark[8]
                 thumb_tip = hand_landmarks.landmark[4]
-                # Calculate Euclidean distance in image space
-                pinch_dist = np.linalg.norm(
-                    np.array([index_tip.x - thumb_tip.x, index_tip.y - thumb_tip.y])
+                # --- 3D pinch distance for normalization (distance between thumb and index tip in 3D) ---
+                pinch_dist_3d = np.linalg.norm(
+                    np.array([
+                        index_tip.x - thumb_tip.x,
+                        index_tip.y - thumb_tip.y,
+                        index_tip.z - thumb_tip.z
+                    ])
                 )
-                info += f"Pinch distance: {pinch_dist:.3f}\n"
-
-                pinch_threshold = 0.10  # You can tune this value
+                # --- Hand scale: use palm width (distance between landmarks 5 and 17) as a normalization factor ---
+                palm_left = hand_landmarks.landmark[5]
+                palm_right = hand_landmarks.landmark[17]
+                palm_width = np.linalg.norm(
+                    np.array([
+                        palm_left.x - palm_right.x,
+                        palm_left.y - palm_right.y,
+                        palm_left.z - palm_right.z
+                    ])
+                )
+                # Avoid division by zero for hand scale
+                hand_scale = palm_width if palm_width > 1e-5 else 1e-5
+                # --- Normalized pinch: pinch distance divided by hand scale, robust to hand distance from camera ---
+                normalized_pinch = pinch_dist_3d / hand_scale
+                # --- Store a neutral pinch value (when not pinched) for compensation reference ---
+                if not hasattr(self, 'neutral_pinch'):
+                    self.neutral_pinch = normalized_pinch
+                # --- Exponential moving average update for neutral pinch when not pinched ---
+                is_pinched = normalized_pinch < 2.0  # Increased threshold for pinch detection; only update neutral when hand is clearly open
+                if not is_pinched:
+                    # EMA update for neutral pinch (slower update for more stability)
+                    self.neutral_pinch = 0.98 * self.neutral_pinch + 0.02 * normalized_pinch
+                # --- Compensation variables explained ---
+                # pinch_dist_3d: 3D distance between thumb and index tip (in normalized hand coordinates)
+                # palm_width: 3D distance between landmarks 5 and 17 (used as a scale reference for hand size)
+                # hand_scale: palm_width, but clamped to avoid division by zero
+                # normalized_pinch: pinch_dist_3d / hand_scale, robust to hand distance from camera
+                # neutral_pinch: running average of normalized_pinch when hand is open (used as reference for 'no pinch')
+                # is_pinched: True if normalized_pinch is below threshold (hand is pinched/closed)
+                # k: compensation gain (smaller = less aggressive z correction)
+                # z_comp: compensation value to cancel out z changes due to pinching
+                # z_compensated: final z value sent to robot after compensation
+                
+                # --- Track neutral z_raw (when hand is open) for compensation ---
+                if not hasattr(self, 'neutral_z_raw'):
+                    self.neutral_z_raw = z_raw
+                # Update neutral_z_raw only when hand is open (not pinched)
+                if not is_pinched:
+                    self.neutral_z_raw = 0.98 * self.neutral_z_raw + 0.02 * z_raw
+                # --- Compensation: add back the change in z_raw due to pinching ---
+                z_comp = self.neutral_z_raw - z_raw
+                z_compensated = z_raw + z_comp
+                # --- Info/debug output for GUI ---
+                info += f"Pinch dist (3D): {pinch_dist_3d:.3f}, Palm width: {palm_width:.3f}, Normalized pinch: {normalized_pinch:.3f}\n"
+                info += f"z_raw: {z_raw:.3f}, neutral_z_raw: {self.neutral_z_raw:.3f}, z_comp: {z_comp:.3f}, z_compensated: {z_compensated:.3f}\n"
+                # --- Use z_compensated for EE z to cancel out pinch-induced z changes ---
+                z_to_use = z_compensated
+                # Gripper logic (binary open/close)
                 min_width = 0.0
                 max_width = 0.08
-                if pinch_dist < pinch_threshold:
-                    gripper_width = min_width  # Fully close
-                else:
-                    gripper_width = max_width  # Fully open
-
+                gripper_width = min_width if is_pinched else max_width
                 # Only send if changed significantly to avoid spamming
                 if abs(gripper_width - self.gripper_width) > 0.01:
                     self.send_gripper_command(gripper_width)
                     self.gripper_width = gripper_width
-
+                filtered_x = self.kalman_x.update(cx)
+                filtered_y = self.kalman_y.update(cy)
+                filtered_z = self.kalman_z.update(z_to_use)
+                filtered_orientation = [
+                    self.kalman_orientation[i].update(rotation_flattened[i])
+                    for i in range(9)
+                ]
                 self.mp_drawing.draw_landmarks(
                     frame, hand_landmarks, self.mp_hands.HAND_CONNECTIONS,
                     self.mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
                     self.mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2),
                 )
-
                 ix, iy = int(index_tip.x * w), int(index_tip.y * h)
                 tx, ty = int(thumb_tip.x * w), int(thumb_tip.y * h)
-
                 cv2.line(frame, (ix, iy), (tx, ty), (0, 255, 0), 2)
                 cv2.putText(frame, f"Gripper: {'Closed' if gripper_width == min_width else 'Open'}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
                 cv2.circle(frame, (cx, cy), 7, (0,255,255), -1)
                 cv2.putText(frame, "Palm Center", (cx, cy-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
-
                 self.publish_target(filtered_x, filtered_y, filtered_z, filtered_orientation)
                 info += f"Gripper: {'Closed' if gripper_width == min_width else 'Open'}\n"
                 break
@@ -364,6 +411,13 @@ class HandFollowerGUI(QWidget):
         
         # Parameter controls
         param_layout = QVBoxLayout()
+        # --- Enable/Disable button ---
+        self.arm_btn = QPushButton("Enable Hand Tracking")
+        self.arm_btn.setCheckable(True)
+        self.arm_btn.setChecked(False)
+        self.arm_btn.clicked.connect(self.toggle_arm)
+        param_layout.addWidget(self.arm_btn)
+        
         self.sim_arm_checkbox = QCheckBox("Simulation Mode (sim_arm)")
         self.sim_arm_checkbox.setChecked(self.node.sim_arm)
         self.sim_arm_checkbox.stateChanged.connect(self.on_param_change)
@@ -433,6 +487,8 @@ class HandFollowerGUI(QWidget):
         
         self.info_label = QLabel()
         self.info_label.setAlignment(Qt.AlignTop)
+        self.info_label.setWordWrap(True)  # Enable word wrap
+        self.info_label.setFixedWidth(220)  # Limit width to keep layout clean
         param_layout.addWidget(self.info_label)
 
         # Error label for gripper command feedback
@@ -502,6 +558,15 @@ class HandFollowerGUI(QWidget):
         if hasattr(self.node, 'last_error'):
             self.node.last_error = ""
     
+    # Toggle arm/disarm state
+    def toggle_arm(self):
+        armed = self.arm_btn.isChecked()
+        self.node.set_armed(armed)
+        if armed:
+            self.arm_btn.setText("Disable Hand Tracking")
+        else:
+            self.arm_btn.setText("Enable Hand Tracking")
+    
     # Update the camera feed and info label
     def update_frame(self):
         ret, frame = self.cap.read()
@@ -541,7 +606,7 @@ class HandFollowerGUI(QWidget):
 # -----------------------------
 def main():
     rclpy.init()
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     # Set a lower resolution for compatibility (optional)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
