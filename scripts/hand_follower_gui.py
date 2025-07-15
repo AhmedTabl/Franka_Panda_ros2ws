@@ -54,15 +54,15 @@ class HandFollowerNode(Node):
         super().__init__('hand_follower')
         
         # Declare and get parameters for workspace mapping and simulation mode
-        self.declare_parameter('sim_arm', True)
+        self.declare_parameter('sim_gripper', True)
         self.declare_parameter('ee_x_min', -1.0)
         self.declare_parameter('ee_x_max', 1.0)
-        self.declare_parameter('ee_y_min', 1.5)
-        self.declare_parameter('ee_y_max', -1.0)
+        self.declare_parameter('ee_y_max', 1.5)
+        self.declare_parameter('ee_y_min', -1.0)
         self.declare_parameter('ee_z_min', -0.7)
         self.declare_parameter('ee_z_max', 3.0)
 
-        self.sim_arm = self.get_parameter('sim_arm').get_parameter_value().bool_value
+        self.sim_gripper = self.get_parameter('sim_gripper').get_parameter_value().bool_value
         self.ee_x_min = self.get_parameter('ee_x_min').get_parameter_value().double_value
         self.ee_x_max = self.get_parameter('ee_x_max').get_parameter_value().double_value
         self.ee_y_min = self.get_parameter('ee_y_min').get_parameter_value().double_value
@@ -73,7 +73,7 @@ class HandFollowerNode(Node):
         
         # ROS2 publisher and action client for gripper
         self.publisher_ = self.create_publisher(Float64MultiArray, '/cartesian_impedance/pose_desired', 10)
-        if self.sim_arm:
+        if self.sim_gripper:
             self.gripper_client = ActionClient(self, Move, '/panda_gripper_sim_node/move')
         else:
             self.gripper_client = ActionClient(self, Move, '/panda_gripper/move')
@@ -117,10 +117,10 @@ class HandFollowerNode(Node):
         goal_msg.speed = speed
         # Try to wait for the correct action server, else set error for GUI
         if not self.gripper_client.wait_for_server(timeout_sec=1.0):
-            if self.sim_arm:
-                self.last_error = "[ERROR] Sim arm selected, but sim gripper action server not available.\nCheck if simulation is running and sim_arm is checked."
+            if self.sim_gripper:
+                self.last_error = "[ERROR] Sim arm selected, but sim gripper action server not available.\nCheck if simulation is running and sim_gripper is checked."
             else:
-                self.last_error = "[ERROR] Real arm selected, but real gripper action server not available.\nCheck if real robot is running and sim_arm is unchecked."
+                self.last_error = "[ERROR] Real arm selected, but real gripper action server not available.\nCheck if real robot is running and sim_gripper is unchecked."
             return False
         self.last_error = ""  # Clear error if successful
         self.gripper_client.send_goal_async(goal_msg)
@@ -307,13 +307,29 @@ class HandFollowerNode(Node):
         msg = Float64MultiArray()
         msg.data = [mapped_z, mapped_x, mapped_y] + orientation + [1.0]
         self.publisher_.publish(msg)
-    
+
+    # Error recovery service call for real arm
+    def call_error_recovery(self):
+        if self.sim_gripper:
+            self.last_error = "[INFO] Error recovery is only available for the real arm."
+            return False
+        # Create client for error recovery service
+        from franka_msgs.srv import ErrorRecovery
+        error_recovery_client = self.create_client(ErrorRecovery, '/panda_error_recovery_service_server/error_recovery')
+        if not error_recovery_client.wait_for_service(timeout_sec=2.0):
+            self.last_error = "[ERROR] Error recovery service not available!"
+            return False
+        req = ErrorRecovery.Request()
+        future = error_recovery_client.call_async(req)
+        self.last_error = "[INFO] Error recovery requested."
+        return True
+
     # Callback for parameter changes
     def on_param_change(self, params):
         for param in params:
-            if param.name == 'sim_arm':
-                self.sim_arm = param.value
-                if self.sim_arm:
+            if param.name == 'sim_gripper':
+                self.sim_gripper = param.value
+                if self.sim_gripper:
                     self.gripper_client = ActionClient(self, Move, '/panda_gripper_sim_node/move')
                 else:
                     self.gripper_client = ActionClient(self, Move, '/panda_gripper/move')
@@ -418,17 +434,17 @@ class HandFollowerGUI(QWidget):
         self.arm_btn.clicked.connect(self.toggle_arm)
         param_layout.addWidget(self.arm_btn)
         
-        self.sim_arm_checkbox = QCheckBox("Simulation Mode (sim_arm)")
-        self.sim_arm_checkbox.setChecked(self.node.sim_arm)
-        self.sim_arm_checkbox.stateChanged.connect(self.on_param_change)
-        param_layout.addWidget(self.sim_arm_checkbox)
+        self.sim_gripper_checkbox = QCheckBox("Simulation Mode (sim_gripper)")
+        self.sim_gripper_checkbox.setChecked(self.node.sim_gripper)
+        self.sim_gripper_checkbox.stateChanged.connect(self.on_param_change)
+        param_layout.addWidget(self.sim_gripper_checkbox)
         group = QGroupBox("EE Mapping Ranges")
         group_layout = QVBoxLayout()
         
         self.x_min = self._make_spinbox("X Min", -2.0, 2.0, self.node.ee_x_min)
         self.x_max = self._make_spinbox("X Max", -2.0, 2.0, self.node.ee_x_max)
-        self.y_min = self._make_spinbox("Y Min", -2.0, 2.0, self.node.ee_y_min)
-        self.y_max = self._make_spinbox("Y Max", -2.0, 2.0, self.node.ee_y_max)
+        self.y_min = self._make_spinbox("Y Min", -2.0, 0.0, self.node.ee_y_min)
+        self.y_max = self._make_spinbox("Y Max", 0.0, 2.0, self.node.ee_y_max)
         self.z_min = self._make_spinbox("Z Min", -1.0, 2.0, self.node.ee_z_min)
         self.z_max = self._make_spinbox("Z Max", 0.0, 5.0, self.node.ee_z_max)
         
@@ -507,6 +523,12 @@ class HandFollowerGUI(QWidget):
         self.cartesian_error_label.setFixedWidth(220)
         param_layout.addWidget(self.cartesian_error_label)
 
+        # Error Recovery button
+        self.error_recovery_btn = QPushButton("Error Recovery")
+        self.error_recovery_btn.setStyleSheet('background-color: orange; font-weight: bold;')
+        self.error_recovery_btn.clicked.connect(self.on_error_recovery)
+        param_layout.addWidget(self.error_recovery_btn)
+
         main_layout.addLayout(param_layout)
         self.setLayout(main_layout)
     
@@ -525,16 +547,16 @@ class HandFollowerGUI(QWidget):
     
     # Handle parameter changes from GUI
     def on_param_change(self):
-        self.node.sim_arm = self.sim_arm_checkbox.isChecked()
+        self.node.sim_gripper = self.sim_gripper_checkbox.isChecked()
         self.node.ee_x_min = self.x_min['spinbox'].value()
         self.node.ee_x_max = self.x_max['spinbox'].value()
-        self.node.ee_y_min = self.y_min['spinbox'].value()
         self.node.ee_y_max = self.y_max['spinbox'].value()
+        self.node.ee_y_min = self.y_min['spinbox'].value()
         self.node.ee_z_min = self.z_min['spinbox'].value()
         self.node.ee_z_max = self.z_max['spinbox'].value()
         
-        # Set force/torque thresholds if not sim_arm
-        if not self.node.sim_arm:
+        # Set force/torque thresholds if not sim_gripper
+        if not self.node.sim_gripper:
             upper_force = self.force_spin.value()
             upper_torque = self.torque_spin.value()
             self.node.set_force_torque_thresholds(upper_force, upper_torque)
@@ -546,7 +568,7 @@ class HandFollowerGUI(QWidget):
         
         # Optionally, update ROS2 parameters as well
         self.node.set_parameters([
-            rclpy.parameter.Parameter('sim_arm', rclpy.Parameter.Type.BOOL, self.node.sim_arm),
+            rclpy.parameter.Parameter('sim_gripper', rclpy.Parameter.Type.BOOL, self.node.sim_gripper),
             rclpy.parameter.Parameter('ee_x_min', rclpy.Parameter.Type.DOUBLE, self.node.ee_x_min),
             rclpy.parameter.Parameter('ee_x_max', rclpy.Parameter.Type.DOUBLE, self.node.ee_x_max),
             rclpy.parameter.Parameter('ee_y_min', rclpy.Parameter.Type.DOUBLE, self.node.ee_y_min),
@@ -566,6 +588,16 @@ class HandFollowerGUI(QWidget):
             self.arm_btn.setText("Disable Hand Tracking")
         else:
             self.arm_btn.setText("Enable Hand Tracking")
+    
+    # Error Recovery button handler
+    def on_error_recovery(self):
+        # Only allow if sim_gripper is False (real arm)
+        if not self.node.sim_gripper:
+            self.node.call_error_recovery()
+        else:
+            self.node.last_error = "[INFO] Error recovery is only available for the real arm."
+        # Update error label immediately
+        self.error_label.setText(self.node.last_error)
     
     # Update the camera feed and info label
     def update_frame(self):
@@ -606,7 +638,7 @@ class HandFollowerGUI(QWidget):
 # -----------------------------
 def main():
     rclpy.init()
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
     # Set a lower resolution for compatibility (optional)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
