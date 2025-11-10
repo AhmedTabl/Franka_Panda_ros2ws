@@ -62,7 +62,7 @@ class JointStateWindow(QWidget):
                     pos = round(msg.position[i], 3) if i < len(msg.position) else None
                     vel = round(msg.velocity[i], 3) if i < len(msg.velocity) else None
                     eff = round(msg.effort[i], 3) if i < len(msg.effort) else None
-                    lines.append(f"{name}: Position={pos}, Velocity={vel}, Effort={eff}")
+                    lines.append(f"{name}: Angle={pos}, Velocity={vel}, Effort={eff}")
             self.text_area.setText('\n'.join(lines))
         # Show EE pose if available
         if franka_state is not None and hasattr(franka_state, 'o_t_ee') and franka_state.o_t_ee is not None and len(franka_state.o_t_ee) == 16:

@@ -57,8 +57,8 @@ class HandFollowerNode(Node):
         self.declare_parameter('sim_gripper', True)
         self.declare_parameter('ee_x_min', -1.0)
         self.declare_parameter('ee_x_max', 1.0)
-        self.declare_parameter('ee_y_max', 1.5)
         self.declare_parameter('ee_y_min', -1.0)
+        self.declare_parameter('ee_y_max', 1.0)
         self.declare_parameter('ee_z_min', -0.7)
         self.declare_parameter('ee_z_max', 3.0)
 
@@ -358,8 +358,8 @@ class HandFollowerNode(Node):
         mapped_x = (smoothed_x / img_w) * (self.ee_x_max - self.ee_x_min) + self.ee_x_min
         mapped_x = max(self.ee_x_min, min(mapped_x, self.ee_x_max))
         mapped_x = round(mapped_x, 3)
-        mapped_y = (smoothed_y / img_h) * (self.ee_y_max - self.ee_y_min) + self.ee_y_min
-        mapped_y = max(min(self.ee_y_min, self.ee_y_max), min(mapped_y, max(self.ee_y_min, self.ee_y_max)))
+        mapped_y = (smoothed_y / img_h) * (self.ee_y_min - self.ee_y_max) + self.ee_y_max
+        mapped_y = max(self.ee_y_min, min(mapped_y, self.ee_y_max))
         mapped_y = round(mapped_y, 3)
         mapped_z = (smoothed_z - 0.01) / (0.1 - 0.01) * (self.ee_z_max - self.ee_z_min) + self.ee_z_min
         mapped_z = max(self.ee_z_min, min(mapped_z, self.ee_z_max))
@@ -638,7 +638,7 @@ class HandFollowerGUI(QWidget):
 # -----------------------------
 def main():
     rclpy.init()
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(2)
     # Set a lower resolution for compatibility (optional)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)

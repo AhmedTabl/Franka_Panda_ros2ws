@@ -20,8 +20,8 @@
 #include <Eigen/Dense>
 #include <controller_interface/controller_interface.hpp>
 #include <rclcpp/rclcpp.hpp>
-#include <sensor_msgs/sensor_msgs/msg/joint_state.hpp>
-#include <std_msgs/std_msgs/msg/float64_multi_array.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/float64_multi_array.hpp>
 
 
 #include <geometry_msgs/msg/pose.hpp>

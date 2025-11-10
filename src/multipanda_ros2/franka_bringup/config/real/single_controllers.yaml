@@ -125,8 +125,8 @@ joint_position_example_controller:
 joint_impedance_controller:
   ros__parameters:
     arm_id: panda
-    k_gains: [20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0]
-    d_gains: [20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0]
+    k_gains: [20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 0.0]
+    d_gains: [20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 0.0]
 
 cartesian_impedance_controller:
   ros__parameters:

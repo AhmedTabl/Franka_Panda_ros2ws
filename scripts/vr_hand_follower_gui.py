@@ -42,12 +42,12 @@ class VRHandFollowerNode(Node):
         super().__init__('vr_hand_follower')
         # Declare and get parameters for workspace mapping and simulation mode
         self.declare_parameter('sim_gripper', True)
-        self.declare_parameter('ee_x_min', -1.0)
-        self.declare_parameter('ee_x_max', 1.0)
-        self.declare_parameter('ee_y_max', 1.5)
-        self.declare_parameter('ee_y_min', -1.0)
-        self.declare_parameter('ee_z_min', -0.7)
-        self.declare_parameter('ee_z_max', 3.0)
+        self.declare_parameter('ee_x_min', -0.5)
+        self.declare_parameter('ee_x_max', 0.5)
+        self.declare_parameter('ee_y_max', 1.0)
+        self.declare_parameter('ee_y_min', 0.1)
+        self.declare_parameter('ee_z_min', 0.1)
+        self.declare_parameter('ee_z_max', 0.7)
 
         self.sim_gripper = self.get_parameter('sim_gripper').get_parameter_value().bool_value
         self.ee_x_min = self.get_parameter('ee_x_min').get_parameter_value().double_value
@@ -71,14 +71,14 @@ class VRHandFollowerNode(Node):
         self.prev_quat = None
         self.quat_alpha = 0.15
         self.last_sent_pos = None
-        self.position_jump_threshold = 100.0  # meters
+        self.position_jump_threshold = 3.0  # meters
         self.armed = False  # For enable/disable button
         self.gui_callback = gui_callback
-        # Smoothing filters
-        self.kalman_x = SimpleKalmanFilter(1e-2, 1e-4)
-        self.kalman_y = SimpleKalmanFilter(1e-2, 1e-4)
-        self.kalman_z = SimpleKalmanFilter(1e-2, 1e-4)
-        self.kalman_orientation = [SimpleKalmanFilter(1e-6, 1e-2) for _ in range(9)]
+        # Smoothing filters (less smoothing for more responsive control)
+        self.kalman_x = SimpleKalmanFilter(5e-2, 5e-3)
+        self.kalman_y = SimpleKalmanFilter(5e-2, 5e-3)
+        self.kalman_z = SimpleKalmanFilter(5e-2, 5e-3)
+        self.kalman_orientation = [SimpleKalmanFilter(5e-5, 5e-2) for _ in range(9)]
         self.gripper_width = 0.04
         # Subscribe to VR hand pose topic
         self.subscription = self.create_subscription(
@@ -93,6 +93,7 @@ class VRHandFollowerNode(Node):
         # X: -0.4 to 0.7 (right)
         # Y: 0 to 1.5 (up)
         # Z: -0.1 to 0.6 (forward)
+        #But
         vr_x_min, vr_x_max = -0.4, 0.7
         vr_y_min, vr_y_max = 0.0, 1.5
         vr_z_min, vr_z_max = -0.1, 0.6
@@ -292,12 +293,12 @@ class VRHandFollowerGUI(QWidget):
         param_layout.addWidget(self.sim_gripper_checkbox)
         group = QGroupBox("EE Mapping Ranges")
         group_layout = QVBoxLayout()
-        self.x_min = self._make_spinbox("X Min", -2.0, 2.0, self.node.ee_x_min)
-        self.x_max = self._make_spinbox("X Max", -2.0, 2.0, self.node.ee_x_max)
-        self.y_min = self._make_spinbox("Y Min", -2.0, 0.0, self.node.ee_y_min)
-        self.y_max = self._make_spinbox("Y Max", 0.0, 2.0, self.node.ee_y_max)
-        self.z_min = self._make_spinbox("Z Min", -1.0, 2.0, self.node.ee_z_min)
-        self.z_max = self._make_spinbox("Z Max", 0.0, 5.0, self.node.ee_z_max)
+        self.x_min = self._make_spinbox("X Min", -5.0, 5.0, self.node.ee_x_min)
+        self.x_max = self._make_spinbox("X Max", -5.0, 5.0, self.node.ee_x_max)
+        self.y_min = self._make_spinbox("Y Min", -5.0, 5.0, self.node.ee_y_min)
+        self.y_max = self._make_spinbox("Y Max", -5.0, 5.0, self.node.ee_y_max)
+        self.z_min = self._make_spinbox("Z Min", -5.0, 5.0, self.node.ee_z_min)
+        self.z_max = self._make_spinbox("Z Max", -5.0, 5.0, self.node.ee_z_max)
         for widget in [self.x_min, self.x_max, self.y_min, self.y_max, self.z_min, self.z_max]:
             group_layout.addLayout(widget['layout'])
         group.setLayout(group_layout)
