@@ -42,12 +42,12 @@ class VRHandFollowerNode(Node):
         super().__init__('vr_hand_follower')
         # Declare and get parameters for workspace mapping and simulation mode
         self.declare_parameter('sim_gripper', True)
-        self.declare_parameter('ee_x_min', -0.5)
-        self.declare_parameter('ee_x_max', 0.5)
+        self.declare_parameter('ee_x_min', -1.0)
+        self.declare_parameter('ee_x_max', 1.0)
         self.declare_parameter('ee_y_max', 1.0)
-        self.declare_parameter('ee_y_min', 0.1)
-        self.declare_parameter('ee_z_min', 0.1)
-        self.declare_parameter('ee_z_max', 0.7)
+        self.declare_parameter('ee_y_min', -1.0)
+        self.declare_parameter('ee_z_min', -0.7)
+        self.declare_parameter('ee_z_max', 3.0)
 
         self.sim_gripper = self.get_parameter('sim_gripper').get_parameter_value().bool_value
         self.ee_x_min = self.get_parameter('ee_x_min').get_parameter_value().double_value
@@ -57,15 +57,18 @@ class VRHandFollowerNode(Node):
         self.ee_z_min = self.get_parameter('ee_z_min').get_parameter_value().double_value
         self.ee_z_max = self.get_parameter('ee_z_max').get_parameter_value().double_value
         self.add_on_set_parameters_callback(self.on_param_change)
+        
         self.publisher_ = self.create_publisher(Float64MultiArray, '/cartesian_impedance/pose_desired', 10)
         if self.sim_gripper:
             self.gripper_client = ActionClient(self, Move, '/panda_gripper_sim_node/move')
         else:
             self.gripper_client = ActionClient(self, Move, '/panda_gripper/move')
+        
         self.collision_srv = self.create_client(SetForceTorqueCollisionBehavior, '/panda_param_service_server/set_force_torque_collision_behavior')
         self.cartesian_param_srv = self.create_client(
             SetParameters,
             '/cartesian_impedance_controller/set_parameters')
+        
         self.last_error = ""
         self.last_cartesian_error = ""
         self.prev_quat = None
@@ -74,12 +77,14 @@ class VRHandFollowerNode(Node):
         self.position_jump_threshold = 3.0  # meters
         self.armed = False  # For enable/disable button
         self.gui_callback = gui_callback
+        
         # Smoothing filters (less smoothing for more responsive control)
-        self.kalman_x = SimpleKalmanFilter(5e-2, 5e-3)
-        self.kalman_y = SimpleKalmanFilter(5e-2, 5e-3)
-        self.kalman_z = SimpleKalmanFilter(5e-2, 5e-3)
-        self.kalman_orientation = [SimpleKalmanFilter(5e-5, 5e-2) for _ in range(9)]
+        self.kalman_x = SimpleKalmanFilter(1e-2, 1e-4)
+        self.kalman_y = SimpleKalmanFilter(1e-2, 1e-4)
+        self.kalman_z = SimpleKalmanFilter(1e-2, 1e-4)
+        self.kalman_orientation = [SimpleKalmanFilter(1e-6, 1e-2) for _ in range(9)]
         self.gripper_width = 0.04
+        
         # Subscribe to VR hand pose topic
         self.subscription = self.create_subscription(
             Float64MultiArray,
@@ -93,7 +98,6 @@ class VRHandFollowerNode(Node):
         # X: -0.4 to 0.7 (right)
         # Y: 0 to 1.5 (up)
         # Z: -0.1 to 0.6 (forward)
-        #But
         vr_x_min, vr_x_max = -0.4, 0.7
         vr_y_min, vr_y_max = 0.0, 1.5
         vr_z_min, vr_z_max = -0.1, 0.6
@@ -137,6 +141,7 @@ class VRHandFollowerNode(Node):
         smoothed_quat = self.smooth_quaternion(quat)
         smoothed_matrix = R.from_quat(smoothed_quat).as_matrix()
         rotation_flattened = smoothed_matrix.flatten().tolist()
+        
         # Placeholder for pinch detection (to be replaced with VR pinch flag)
         is_pinched = False  # TODO: Replace with VR pinch flag
         min_width = 0.0
@@ -148,10 +153,12 @@ class VRHandFollowerNode(Node):
         filtered_x = self.kalman_x.update(x)
         filtered_y = self.kalman_y.update(y)
         filtered_z = self.kalman_z.update(z)
-        filtered_orientation = [
-            self.kalman_orientation[i].update(rotation_flattened[i])
-            for i in range(9)
-        ]
+        # filtered_orientation = [
+        #     self.kalman_orientation[i].update(rotation_flattened[i])
+        #     for i in range(9)
+        # ]
+        filtered_orientation = np.array([(0,0,0),(0,0,0),(0,0,0)])
+
         # Map VR hand position to EE position
         mapped_x, mapped_y, mapped_z = self.map_to_ee(filtered_x, filtered_y, filtered_z)
         self.publish_target(mapped_x, mapped_y, mapped_z, filtered_orientation)
@@ -287,18 +294,21 @@ class VRHandFollowerGUI(QWidget):
         self.arm_btn.setChecked(False)
         self.arm_btn.clicked.connect(self.toggle_arm)
         param_layout.addWidget(self.arm_btn)
+        
         self.sim_gripper_checkbox = QCheckBox("Simulation Mode (sim_gripper)")
         self.sim_gripper_checkbox.setChecked(self.node.sim_gripper)
         self.sim_gripper_checkbox.stateChanged.connect(self.on_param_change)
         param_layout.addWidget(self.sim_gripper_checkbox)
         group = QGroupBox("EE Mapping Ranges")
         group_layout = QVBoxLayout()
+        
         self.x_min = self._make_spinbox("X Min", -5.0, 5.0, self.node.ee_x_min)
         self.x_max = self._make_spinbox("X Max", -5.0, 5.0, self.node.ee_x_max)
         self.y_min = self._make_spinbox("Y Min", -5.0, 5.0, self.node.ee_y_min)
         self.y_max = self._make_spinbox("Y Max", -5.0, 5.0, self.node.ee_y_max)
         self.z_min = self._make_spinbox("Z Min", -5.0, 5.0, self.node.ee_z_min)
         self.z_max = self._make_spinbox("Z Max", -5.0, 5.0, self.node.ee_z_max)
+        
         for widget in [self.x_min, self.x_max, self.y_min, self.y_max, self.z_min, self.z_max]:
             group_layout.addLayout(widget['layout'])
         group.setLayout(group_layout)
@@ -400,15 +410,18 @@ class VRHandFollowerGUI(QWidget):
         self.node.ee_y_min = self.y_min['spinbox'].value()
         self.node.ee_z_min = self.z_min['spinbox'].value()
         self.node.ee_z_max = self.z_max['spinbox'].value()
+        
         # Set force/torque thresholds if not sim_gripper
         if not self.node.sim_gripper:
             upper_force = self.force_spin.value()
             upper_torque = self.torque_spin.value()
             self.node.set_force_torque_thresholds(upper_force, upper_torque)
+        
         # Set cartesian impedance controller parameters
         pos_stiff = self.pos_stiff_spin.value()
         rot_stiff = self.rot_stiff_spin.value()
         self.node.set_cartesian_stiffness(pos_stiff, rot_stiff)
+        
         # Optionally, update ROS2 parameters as well
         self.node.set_parameters([
             RclpyParameter('sim_gripper', RclpyParameter.Type.BOOL, self.node.sim_gripper),
