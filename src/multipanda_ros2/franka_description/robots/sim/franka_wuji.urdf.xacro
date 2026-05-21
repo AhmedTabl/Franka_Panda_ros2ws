@@ -1,0 +1,24 @@
+<?xml version='1.0' encoding='utf-8'?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="franka_wuji">
+  <xacro:arg name="arm_id" default="panda"/>
+  <xacro:arg name="initial_positions" default="0.0 ${-pi/4} 0.0 ${-3*pi/4} 0.0 ${pi/2} ${pi/4}"/>
+
+  <xacro:arg name="end_effector_urdf" default="$(find wuji_hand_description)/urdf/right-ros.urdf"/>
+  <xacro:arg name="end_effector_base_link" default="right_palm_link"/>
+  <xacro:arg name="attachment_link" default="$(arg arm_id)_link8"/>
+  <xacro:arg name="attachment_xyz" default="0 0 0"/>
+  <xacro:arg name="attachment_rpy" default="0 0 ${pi}"/>
+
+  <xacro:include filename="$(find franka_description)/robots/common/panda_arm.xacro"/>
+  <xacro:panda_arm arm_id="$(arg arm_id)" safety_distance="0.03"/>
+
+  <xacro:include filename="$(arg end_effector_urdf)"/>
+  <joint name="$(arg arm_id)_wuji_hand_joint" type="fixed">
+    <parent link="$(arg attachment_link)"/>
+    <child link="$(arg end_effector_base_link)"/>
+    <origin xyz="$(arg attachment_xyz)" rpy="$(arg attachment_rpy)"/>
+  </joint>
+
+  <xacro:include filename="$(find franka_description)/robots/sim/panda_arm_sim.ros2_control.xacro"/>
+  <xacro:panda_arm_sim_ros2_control ns="$(arg arm_id)" hand="false" initial_positions="$(arg initial_positions)"/>
+</robot>
