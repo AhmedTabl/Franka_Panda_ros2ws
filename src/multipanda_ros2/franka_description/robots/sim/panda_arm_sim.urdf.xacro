@@ -1,16 +1,35 @@
 <?xml version='1.0' encoding='utf-8'?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="panda">
   <xacro:arg name="arm_id" default="panda"/> <!-- Name of this panda -->
-  <xacro:arg name="hand" default="true"/> <!-- Should a franka_gripper be mounted at the flange?" -->
+  <xacro:arg name="hand" default="true"/> <!-- Should an end-effector be mounted at the flange? -->
+  <xacro:arg name="end_effector" default="franka"/> <!-- End-effector type: franka, wuji, or custom. -->
   <xacro:arg name="initial_positions" default="0.0 ${-pi/4} 0.0 ${-3*pi/4} 0.0 ${pi/2} ${pi/4}"/> <!-- initial joint positions of the robot-->
+  <xacro:arg name="end_effector_urdf" default="$(find wuji_hand_description)/urdf/right-ros.urdf"/>
+  <xacro:arg name="end_effector_base_link" default="right_palm_link"/>
+  <xacro:arg name="attachment_link" default="$(arg arm_id)_link8"/>
+  <xacro:arg name="attachment_xyz" default="0 0 0"/>
+  <xacro:arg name="attachment_rpy" default="0 0 ${pi}"/>
 
   <xacro:include filename="$(find franka_description)/robots/common/panda_arm.xacro"/>
   <xacro:panda_arm arm_id="$(arg arm_id)" safety_distance="0.03"/>
 
   <xacro:if value="$(arg hand)">
-    <xacro:include filename="$(find franka_description)/robots/common/hand.xacro"/>
-    <xacro:hand ns="$(arg arm_id)" rpy="0 0 ${-pi/4}" connected_to="$(arg arm_id)_link8" safety_distance="0.03"/>
+    <xacro:if value="${'$(arg end_effector)' == 'franka'}">
+      <xacro:include filename="$(find franka_description)/robots/common/hand.xacro"/>
+      <xacro:hand ns="$(arg arm_id)" rpy="0 0 ${-pi/4}" connected_to="$(arg arm_id)_link8" safety_distance="0.03"/>
+    </xacro:if>
+
+    <xacro:if value="${'$(arg end_effector)' == 'wuji' or '$(arg end_effector)' == 'custom'}">
+      <xacro:include filename="$(arg end_effector_urdf)"/>
+      <joint name="$(arg arm_id)_$(arg end_effector)_end_effector_joint" type="fixed">
+        <parent link="$(arg attachment_link)"/>
+        <child link="$(arg end_effector_base_link)"/>
+        <origin xyz="$(arg attachment_xyz)" rpy="$(arg attachment_rpy)"/>
+      </joint>
+    </xacro:if>
   </xacro:if>
+
   <xacro:include filename="$(find franka_description)/robots/sim/panda_arm_sim.ros2_control.xacro"/>
-  <xacro:panda_arm_sim_ros2_control ns="$(arg arm_id)" hand="$(arg hand)" initial_positions="$(arg initial_positions)"/>
+  <xacro:property name="stock_gripper_control" value="${'$(arg hand)' == 'true' and '$(arg end_effector)' == 'franka'}"/>
+  <xacro:panda_arm_sim_ros2_control ns="$(arg arm_id)" hand="${stock_gripper_control}" initial_positions="$(arg initial_positions)"/>
 </robot>

@@ -10,6 +10,7 @@ This repository contains my ROS 2 workspace (`ros2_ws`) for controlling and expe
 - [Workspace Structure](#workspace-structure)
 - [Main Features](#main-features)
 - [Getting Started](#getting-started)
+- [Modular Franka End-Effectors](#modular-franka-end-effectors)
 - [Hand Follower GUI](#hand-follower-gui)
 - [External Packages & Attribution](#external-packages--attribution)
 - [License](#license)
@@ -55,6 +56,7 @@ ros2_ws/
 - Live editing of workspace mapping, gripper, and controller parameters
 - Safety features (position jump filtering, error feedback)
 - Easy switching between simulation and real hardware
+- Modular MuJoCo simulation launch for the Panda with no end effector, the stock Franka gripper, the Wuji hand, or future custom hands/tools
 - Additional tools: ArUco marker following, joint and cartesian teleop
 
 ---
@@ -83,6 +85,24 @@ ros2_ws/
   python3 scripts/hand_follower_gui.py
   ```
 - **Connect to the robot or simulation** as needed.
+
+---
+
+## Modular Franka End-Effectors
+
+The single-arm Franka MuJoCo simulation can now select the end effector from launch arguments:
+
+```bash
+ros2 launch franka_bringup franka_sim.launch.py hand:=true end_effector:=franka
+ros2 launch franka_bringup franka_sim.launch.py hand:=true end_effector:=wuji
+ros2 launch franka_bringup franka_sim.launch.py hand:=false
+```
+
+The detailed guide lives here:
+
+[Franka bringup end-effector selection guide](src/multipanda_ros2/franka_bringup/README.md)
+
+That guide explains the new `hand` and `end_effector` arguments, how the Wuji hand is attached and gravity-compensated in MuJoCo, and how to add future custom end effectors with matching URDF and MuJoCo scene files.
 
 ---
 
@@ -122,4 +142,3 @@ This workspace is licensed under the [Apache License 2.0](https://www.apache.org
 - [`camera-calibration`](https://github.com/niconielsen32/camera-calibration): See their LICENSE.
 
 All other content in this repository (scripts, GUI tools, configuration) is original and released under Apache 2.0.
-
