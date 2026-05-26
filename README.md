@@ -11,6 +11,7 @@ This repository contains my ROS 2 workspace (`ros2_ws`) for controlling and expe
 - [Main Features](#main-features)
 - [Getting Started](#getting-started)
 - [Modular Franka End-Effectors](#modular-franka-end-effectors)
+- [Meta Quest VR Teleop](#meta-quest-vr-teleop)
 - [Hand Follower GUI](#hand-follower-gui)
 - [External Packages & Attribution](#external-packages--attribution)
 - [License](#license)
@@ -57,6 +58,7 @@ ros2_ws/
 - Safety features (position jump filtering, error feedback)
 - Easy switching between simulation and real hardware
 - Modular MuJoCo simulation launch for the Panda with no end effector, the stock Franka gripper, the Wuji hand, or future custom hands/tools
+- Meta Quest hand-tracking teleoperation for the Franka arm plus Wuji hand in simulation
 - Additional tools: ArUco marker following, joint and cartesian teleop
 
 ---
@@ -103,6 +105,23 @@ The detailed guide lives here:
 [Franka bringup end-effector selection guide](src/multipanda_ros2/franka_bringup/README.md)
 
 That guide explains the new `hand` and `end_effector` arguments, how the Wuji hand is attached and gravity-compensated in MuJoCo, and how to add future custom end effectors with matching URDF and MuJoCo scene files.
+
+---
+
+## Meta Quest VR Teleop
+
+The workspace now includes a ROS 2 package for Meta Quest hand-tracking teleoperation of the simulated Franka + Wuji setup. It receives Hand Tracking Streamer telemetry, maps the right wrist to relative Franka Cartesian motion, maps right-hand finger curl to Wuji joints, and uses a left-fist gesture to pause arm motion while leaving hand control active.
+
+Detailed setup, launch, Quest network configuration, diagnostics, and tuning instructions live here:
+
+[Franka Wuji VR teleop guide](src/multipanda_ros2/franka_wuji_vr_teleop/README.md)
+
+Quick start:
+
+```bash
+ros2 launch franka_bringup franka_sim.launch.py hand:=true end_effector:=wuji use_rviz:=true
+ros2 launch franka_wuji_vr_teleop franka_wuji_vr_teleop.launch.py protocol:=tcp tcp_host:=10.202.52.252 tcp_port:=8000
+```
 
 ---
 

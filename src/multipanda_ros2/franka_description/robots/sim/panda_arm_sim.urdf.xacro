@@ -32,4 +32,9 @@
   <xacro:include filename="$(find franka_description)/robots/sim/panda_arm_sim.ros2_control.xacro"/>
   <xacro:property name="stock_gripper_control" value="${'$(arg hand)' == 'true' and '$(arg end_effector)' == 'franka'}"/>
   <xacro:panda_arm_sim_ros2_control ns="$(arg arm_id)" hand="${stock_gripper_control}" initial_positions="$(arg initial_positions)"/>
+
+  <xacro:if value="${'$(arg hand)' == 'true' and '$(arg end_effector)' == 'wuji'}">
+    <xacro:include filename="$(find franka_description)/robots/sim/wuji_hand_sim.ros2_control.xacro"/>
+    <xacro:wuji_hand_sim_ros2_control side="right"/>
+  </xacro:if>
 </robot>

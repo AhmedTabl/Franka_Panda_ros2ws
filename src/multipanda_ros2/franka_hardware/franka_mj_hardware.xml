@@ -8,4 +8,13 @@
         </description>
         
     </class>
+    <class name="franka_hardware/GenericMjJointPositionHardwareSystem"
+           type="franka_hardware::GenericMjJointPositionHardwareSystem"
+           base_class_type="mujoco_ros2_control::MujocoRos2SystemInterface">
+
+        <description>
+            Generic MuJoCo position hardware interface for end-effectors with named joints and position actuators
+        </description>
+
+    </class>
 </library>

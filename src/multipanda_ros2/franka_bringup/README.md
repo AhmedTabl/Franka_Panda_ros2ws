@@ -89,7 +89,6 @@ It now selects the MuJoCo model according to the requested end effector:
 - `hand:=false` loads `franka_description/mujoco/franka/scene_ng.xml`
 - `hand:=true end_effector:=custom` requires `end_effector_scene:=/path/to/custom_scene.xml`
 
-The older Wuji-only launch/xacro wrappers were removed so `franka_sim.launch.py` and `panda_arm_sim.urdf.xacro` are the canonical path.
 
 ## Why Wuji Does Not Use The Stock `hand_1` Hardware Flag
 
@@ -101,7 +100,7 @@ In the existing Franka MuJoCo hardware plugin, `hand_1=True` means "the stock Fr
 
 The Wuji hand does not use those names or that actuator model, so the unified xacro intentionally keeps `hand_1=False` for `end_effector:=wuji`. This avoids accidentally starting the stock gripper action server for a non-Franka hand.
 
-Wuji hand control should be added separately later with Wuji-specific joints, actuators, controller interfaces, and controller YAML.
+The Wuji hand uses its own ros2_control system and controller instead.
 
 ## End-Effector Weight And Gravity Compensation
 
@@ -207,6 +206,53 @@ ros2 launch franka_bringup franka_sim.launch.py \
   use_rviz:=true
 ```
 
+## Wuji Hand Control In Simulation
+
+When launched with `hand:=true end_effector:=wuji`, the sim description includes:
+
+- `franka_hardware/GenericMjJointPositionHardwareSystem`
+- `franka_description/robots/sim/wuji_hand_sim.ros2_control.xacro`
+- MuJoCo position actuators for the 20 Wuji finger joints
+- `wuji_joint_position_controller`
+
+The launch file starts `wuji_joint_position_controller` automatically for the Wuji hand. It exposes a standard `std_msgs/msg/Float64MultiArray` command topic:
+
+```text
+/wuji_joint_position_controller/commands
+```
+
+Send one position command per Wuji joint, in this order:
+
+```text
+right_finger1_joint1, right_finger1_joint2, right_finger1_joint3, right_finger1_joint4,
+right_finger2_joint1, right_finger2_joint2, right_finger2_joint3, right_finger2_joint4,
+right_finger3_joint1, right_finger3_joint2, right_finger3_joint3, right_finger3_joint4,
+right_finger4_joint1, right_finger4_joint2, right_finger4_joint3, right_finger4_joint4,
+right_finger5_joint1, right_finger5_joint2, right_finger5_joint3, right_finger5_joint4
+```
+
+Open-hand test command:
+
+```bash
+ros2 topic pub --once /wuji_joint_position_controller/commands std_msgs/msg/Float64MultiArray \
+  "{data: [0.0368, -0.1576, -0.4638, -0.4829, -0.1611, -0.4044, -0.4714, -0.4644, -0.1719, -0.4014, -0.4632, -0.4697, -0.1601, -0.4134, -0.4782, -0.4825, -0.1674, -0.4203, -0.4804, -0.4705]}"
+```
+
+Closed-hand smoke test command:
+
+```bash
+ros2 topic pub --once /wuji_joint_position_controller/commands std_msgs/msg/Float64MultiArray \
+  "{data: [1.0, 0.6, 0.8, 0.8, 1.0, 0.1, 0.8, 0.8, 1.0, 0.1, 0.8, 0.8, 1.0, 0.1, 0.8, 0.8, 1.0, 0.1, 0.8, 0.8]}"
+```
+
+The VR bridge for this workspace lives in:
+
+```text
+franka_wuji_vr_teleop
+```
+
+It receives Hand Tracking Streamer data from the Quest, publishes Franka arm targets to `/cartesian_impedance/pose_desired`, and publishes Wuji finger targets to `/wuji_joint_position_controller/commands`.
+
 ## Current Limitation
 
-This modular path is for spawning, visualization, and arm-side simulation behavior. It does not yet implement Wuji or custom hand control. Control for non-Franka end effectors should be added later through dedicated ros2_control interfaces, MuJoCo actuators, controller YAML, and launch wiring.
+The Wuji hand can now be commanded in MuJoCo through ros2_control and through the Quest VR teleop package. Custom end-effectors still need their own ros2_control interfaces, MuJoCo actuators, controller YAML, and launch wiring.

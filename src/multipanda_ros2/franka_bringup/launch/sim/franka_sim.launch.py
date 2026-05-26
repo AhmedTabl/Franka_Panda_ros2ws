@@ -119,7 +119,7 @@ def generate_launch_description():
                      'rate': 30}],
         )
 
-        return [
+        launch_actions = [
             IncludeLaunchDescription(
                 FrontendLaunchDescriptionSource(franka_bringup_path + '/launch/sim/launch_mujoco_ros_server.launch'),
                 launch_arguments={
@@ -146,6 +146,19 @@ def generate_launch_description():
                  condition=IfCondition(LaunchConfiguration(use_rviz_param))
                  )
         ]
+
+        if hand and end_effector == 'wuji':
+            launch_actions.append(
+                Node(
+                    package='controller_manager',
+                    executable='spawner',
+                    arguments=['wuji_joint_position_controller', '-c',
+                               concatenate_ns(ns, 'controller_manager', True)],
+                    output='screen',
+                )
+            )
+
+        return launch_actions
     
 
     return LaunchDescription([

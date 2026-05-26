@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="wuji_hand_sim_ros2_control" params="side:=right">
+    <ros2_control name="${side}_wuji_hand" type="system">
+      <hardware>
+        <plugin>franka_hardware/GenericMjJointPositionHardwareSystem</plugin>
+      </hardware>
+
+      <xacro:macro name="configure_wuji_joint" params="joint_name initial_position lower upper">
+        <joint name="${joint_name}">
+          <param name="actuator_name">${joint_name}_actuator</param>
+          <param name="initial_position">${initial_position}</param>
+          <command_interface name="position">
+            <param name="min">${lower}</param>
+            <param name="max">${upper}</param>
+          </command_interface>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+          <state_interface name="effort"/>
+        </joint>
+      </xacro:macro>
+
+      <xacro:configure_wuji_joint joint_name="${side}_finger1_joint1" initial_position="0.20" lower="0.0368" upper="1.6125"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger1_joint2" initial_position="0.00" lower="-0.1576" upper="0.9312"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger1_joint3" initial_position="-0.05" lower="-0.4638" upper="1.5607"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger1_joint4" initial_position="-0.05" lower="-0.4829" upper="1.5451"/>
+
+      <xacro:configure_wuji_joint joint_name="${side}_finger2_joint1" initial_position="0.00" lower="-0.1611" upper="1.5588"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger2_joint2" initial_position="-0.10" lower="-0.4044" upper="0.3054"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger2_joint3" initial_position="-0.08" lower="-0.4714" upper="1.5504"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger2_joint4" initial_position="-0.08" lower="-0.4644" upper="1.5753"/>
+
+      <xacro:configure_wuji_joint joint_name="${side}_finger3_joint1" initial_position="0.00" lower="-0.1719" upper="1.5496"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger3_joint2" initial_position="-0.10" lower="-0.4014" upper="0.2996"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger3_joint3" initial_position="-0.08" lower="-0.4632" upper="1.5613"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger3_joint4" initial_position="-0.08" lower="-0.4697" upper="1.5702"/>
+
+      <xacro:configure_wuji_joint joint_name="${side}_finger4_joint1" initial_position="0.00" lower="-0.1601" upper="1.5534"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger4_joint2" initial_position="-0.10" lower="-0.4134" upper="0.3161"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger4_joint3" initial_position="-0.08" lower="-0.4782" upper="1.5448"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger4_joint4" initial_position="-0.08" lower="-0.4825" upper="1.5550"/>
+
+      <xacro:configure_wuji_joint joint_name="${side}_finger5_joint1" initial_position="0.00" lower="-0.1674" upper="1.5539"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger5_joint2" initial_position="-0.12" lower="-0.4203" upper="0.2931"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger5_joint3" initial_position="-0.08" lower="-0.4804" upper="1.5420"/>
+      <xacro:configure_wuji_joint joint_name="${side}_finger5_joint4" initial_position="-0.08" lower="-0.4705" upper="1.5709"/>
+    </ros2_control>
+  </xacro:macro>
+</robot>

@@ -34,6 +34,8 @@ controller_manager:
       type: franka_example_controllers/JointImpedanceController
     cartesian_impedance_controller:
       type: franka_example_controllers/CartesianImpedanceController
+    wuji_joint_position_controller:
+      type: forward_command_controller/ForwardCommandController
         
 
 franka_robot_state_broadcaster:
@@ -87,6 +89,31 @@ cartesian_impedance_controller:
     arm_id: panda
     pos_stiff: 10.0
     rot_stiff: 10.0
+
+wuji_joint_position_controller:
+  ros__parameters:
+    joints:
+      - right_finger1_joint1
+      - right_finger1_joint2
+      - right_finger1_joint3
+      - right_finger1_joint4
+      - right_finger2_joint1
+      - right_finger2_joint2
+      - right_finger2_joint3
+      - right_finger2_joint4
+      - right_finger3_joint1
+      - right_finger3_joint2
+      - right_finger3_joint3
+      - right_finger3_joint4
+      - right_finger4_joint1
+      - right_finger4_joint2
+      - right_finger4_joint3
+      - right_finger4_joint4
+      - right_finger5_joint1
+      - right_finger5_joint2
+      - right_finger5_joint3
+      - right_finger5_joint4
+    interface_name: position
 
 multi_mode_controller:
   ros__parameters:

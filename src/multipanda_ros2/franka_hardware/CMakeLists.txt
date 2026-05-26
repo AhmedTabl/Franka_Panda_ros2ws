@@ -90,6 +90,7 @@ pluginlib_export_plugin_description_file(hardware_interface franka_hardware.xml)
 add_library(franka_mj_hardware 
   SHARED
   src/sim/franka_mj_hardware_system.cpp
+  src/sim/generic_mj_joint_position_hardware_system.cpp
   src/sim/robot_sim.cpp
   src/sim/gripper_sim_action_server.cpp
   src/common/franka_executor.cpp
