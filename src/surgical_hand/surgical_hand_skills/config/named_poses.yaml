@@ -1,0 +1,93 @@
+# Named hand poses for the surgical hand skills layer.
+#
+# Keys under each pose are joint ALIASES from
+# surgical_hand_description/config/hand_joints.yaml (not raw URDF joint
+# names), so poses survive the switch from the ORCA placeholder to the
+# custom hand. Values are joint positions in radians.
+#
+# Joints not listed in a pose fall back to their `initial_position` from
+# hand_joints.yaml.
+#
+# STATUS: these poses are numeric placeholders chosen from the ORCA joint
+# limits. They have been checked to be within limits, but have NOT been
+# visually tuned in RViz/MuJoCo yet. Tuning happens in the skills slice
+# (slice 8); treat the values as starting points, not final grasp shapes.
+
+poses:
+  open: {}   # all joints at their initial (neutral) position
+
+  release: {}  # alias of open for the primitive layer's vocabulary
+
+  close:
+    thumb_cmc: 0.30
+    thumb_abd: 0.60
+    thumb_mcp: 1.20
+    thumb_ip: 1.20
+    index_mcp: 1.40
+    index_tip: 1.50
+    middle_mcp: 1.40
+    middle_tip: 1.50
+    ring_mcp: 1.40
+    ring_tip: 1.50
+    pinky_mcp: 1.40
+    pinky_tip: 1.50
+
+  # Thumb-index fingertip opposition; middle/ring/pinky curled out of the way.
+  precision_pinch:
+    thumb_cmc: 0.30
+    thumb_abd: 0.70
+    thumb_mcp: 0.80
+    thumb_ip: 0.60
+    index_mcp: 0.80
+    index_tip: 0.90
+    middle_mcp: 1.20
+    middle_tip: 1.30
+    ring_mcp: 1.20
+    ring_tip: 1.30
+    pinky_mcp: 1.20
+    pinky_tip: 1.30
+
+  # Thumb-index-middle tripod; ring/pinky curled away.
+  tripod_grasp:
+    thumb_cmc: 0.30
+    thumb_abd: 0.65
+    thumb_mcp: 0.70
+    thumb_ip: 0.55
+    index_mcp: 0.70
+    index_tip: 0.70
+    middle_mcp: 0.70
+    middle_tip: 0.70
+    ring_mcp: 1.30
+    ring_tip: 1.40
+    pinky_mcp: 1.30
+    pinky_tip: 1.40
+
+  # Tighter tripod intended for holding a needle-driver handle.
+  needle_driver_grasp:
+    thumb_cmc: 0.35
+    thumb_abd: 0.75
+    thumb_mcp: 0.90
+    thumb_ip: 0.80
+    index_mcp: 0.90
+    index_tip: 1.00
+    middle_mcp: 0.90
+    middle_tip: 1.00
+    ring_mcp: 1.30
+    ring_tip: 1.40
+    pinky_mcp: 1.30
+    pinky_tip: 1.40
+
+  # Fine thumb-index pinch for grasping suture strands.
+  suture_pinch:
+    thumb_cmc: 0.30
+    thumb_abd: 0.72
+    thumb_mcp: 0.95
+    thumb_ip: 0.75
+    index_mcp: 0.95
+    index_tip: 1.05
+    middle_mcp: 1.25
+    middle_tip: 1.35
+    ring_mcp: 1.25
+    ring_tip: 1.35
+    pinky_mcp: 1.25
+    pinky_tip: 1.35

@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<!--
+  Standalone surgical hand robot description.
+
+  Wraps the ORCA v2 right-hand URDF (placeholder until the custom 3-finger
+  hand CAD/URDF exists) and adds a backend-switchable ros2_control block.
+
+  Args:
+    backend     - mock | mujoco | real (see surgical_hand.ros2_control.xacro)
+    config_file - hand joint YAML (defaults to hand_joints.yaml in this package)
+
+  Note: only the right ORCA hand is wired up. The left URDF uses different
+  auto-generated joint names and would need its own joint YAML.
+-->
+<robot name="surgical_hand" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="backend" default="mock"/>
+  <xacro:arg name="config_file" default="$(find surgical_hand_description)/config/hand_joints.yaml"/>
+
+  <!-- ORCA placeholder model (plain URDF; xacro inlines its contents). -->
+  <xacro:include filename="$(find orcahand_description)/v2/models/urdf/orcahand_right.urdf"/>
+
+  <!--
+    Stable base frame. Later slices attach this frame to the Franka flange;
+    for the standalone hand it doubles as the RViz fixed frame.
+    ForeArmStructure-Model_e18f2368 is the root link of the ORCA URDF.
+  -->
+  <link name="surgical_hand_base"/>
+  <joint name="surgical_hand_base_joint" type="fixed">
+    <parent link="surgical_hand_base"/>
+    <child link="ForeArmStructure-Model_e18f2368"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <xacro:include filename="$(find surgical_hand_description)/robots/surgical_hand.ros2_control.xacro"/>
+  <xacro:surgical_hand_ros2_control name="surgical_hand" backend="$(arg backend)" config_file="$(arg config_file)"/>
+</robot>

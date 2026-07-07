@@ -1,0 +1,43 @@
+# Tension estimator parameters for the single XC330-M288-T + tendon spool.
+#
+# EVERY numeric value here is a placeholder derived from the XC330-M288-T
+# datasheet or the hand design doc, NOT from bench measurement. The
+# one-motor hardware slice must characterize kt, offset, deadband, and
+# efficiency (and ideally fill the calibration table) before any estimate
+# is trusted for control decisions.
+
+tension_estimator:
+  ros__parameters:
+    # Output-shaft torque per amp. Rough datasheet stall point:
+    # 0.93 N*m / 1.8 A (6 V) ~= 0.52.
+    kt_nm_per_a: 0.52
+
+    # Roughly the XC330 no-load current draw.
+    current_offset_a: 0.04
+
+    # Friction/noise floor around the offset.
+    current_deadband_a: 0.02
+
+    # Tendon spool/capstan radius [m]; set to the printed spool when built.
+    spool_radius_m: 0.005
+
+    # Gearbox (288.4:1) + spool + routing losses; placeholder.
+    efficiency: 0.6
+
+    # +1 or -1 so that positive current = pulling the tendon.
+    direction: 1
+
+    # First-order low-pass cutoff [Hz]; <= 0 disables.
+    lowpass_cutoff_hz: 10.0
+
+    # Near-stall region where the linear model is not trusted (stall 1.8 A).
+    saturation_current_a: 1.6
+
+    # Suture-strand design capacity from the hand spec doc.
+    safety_threshold_n: 4.0
+
+    # Optional empirical calibration (parallel arrays, strictly increasing
+    # currents). Omit both entirely to use the analytic model above — an
+    # explicit empty list [] is rejected by rclcpp (untyped array).
+    # calibration_currents_a: [0.1, 0.5, 1.0]
+    # calibration_tensions_n: [1.0, 6.0, 14.0]

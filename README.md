@@ -12,6 +12,7 @@ This repository contains my ROS 2 workspace (`ros2_ws`) for controlling and expe
 - [Getting Started](#getting-started)
 - [Modular Franka End-Effectors](#modular-franka-end-effectors)
 - [Meta Quest VR Teleop](#meta-quest-vr-teleop)
+- [Surgical Hand Stack](#surgical-hand-stack-cable-driven-3-finger-research-hand)
 - [Hand Follower GUI](#hand-follower-gui)
 - [External Packages & Attribution](#external-packages--attribution)
 - [License](#license)
@@ -121,6 +122,27 @@ Quick start:
 ```bash
 ros2 launch franka_bringup franka_sim.launch.py hand:=true end_effector:=wuji use_rviz:=true
 ros2 launch franka_wuji_vr_teleop franka_wuji_vr_teleop.launch.py protocol:=tcp tcp_host:=10.202.52.252 tcp_port:=8000
+```
+
+---
+
+## Surgical Hand Stack (cable-driven 3-finger research hand)
+
+The workspace also hosts the ROS 2 stack for a cable-driven 3-finger robotic
+hand for surgical manipulation research (suturing/CABG-inspired primitives).
+It uses the ORCA hand as a placeholder model and exposes one consistent
+ros2_control interface across fake, MuJoCo, and (future) real
+Arduino/DYNAMIXEL backends.
+
+Architecture, build, verification, and roadmap live here:
+
+[Surgical hand stack guide](src/surgical_hand/README.md)
+
+Quick start (fake backend):
+
+```bash
+ros2 launch surgical_hand_bringup surgical_hand.launch.py
+ros2 run surgical_hand_skills hand_pose_cli close
 ```
 
 ---

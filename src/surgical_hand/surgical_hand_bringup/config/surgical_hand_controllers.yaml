@@ -1,0 +1,20 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 200
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    # Same controller type the Wuji hand uses in this workspace
+    # (forward position commands via Float64MultiArray on
+    #  /hand_joint_position_controller/commands).
+    hand_joint_position_controller:
+      type: forward_command_controller/ForwardCommandController
+
+hand_joint_position_controller:
+  ros__parameters:
+    interface_name: position
+    # NOTE: the `joints` list is intentionally NOT written here. It is
+    # generated at launch time from
+    # surgical_hand_description/config/hand_joints.yaml so the joint set has
+    # a single source of truth. See surgical_hand.launch.py.

@@ -1,0 +1,61 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!--
+    Backend-switchable ros2_control description for the surgical hand.
+
+    The joint list is NOT hardcoded here: it is generated from the YAML file
+    passed as `config_file` (normally
+    surgical_hand_description/config/hand_joints.yaml).
+
+    backend values:
+      mock    - mock_components/GenericSystem: no physics, position commands
+                are mirrored back as states. Used for the fake backend slice.
+      mujoco  - franka_hardware/GenericMjJointPositionHardwareSystem: the same
+                generic MuJoCo joint-position plugin already used by the Wuji
+                hand in this workspace. Requires a matching MJCF scene with
+                one position actuator per joint named "<joint>_actuator".
+      real    - reserved for the Arduino Due + DYNAMIXEL tendon hardware.
+                The plugin named below does not exist yet, so selecting this
+                backend fails at controller_manager startup with a clear
+                "plugin not found" error instead of silently doing nothing.
+  -->
+  <xacro:macro name="surgical_hand_ros2_control" params="name:=surgical_hand backend:=mock config_file">
+    <xacro:property name="hand_config" value="${xacro.load_yaml(config_file)}"/>
+
+    <ros2_control name="${name}" type="system">
+      <hardware>
+        <xacro:if value="${backend == 'mock'}">
+          <plugin>mock_components/GenericSystem</plugin>
+        </xacro:if>
+        <xacro:if value="${backend == 'mujoco'}">
+          <plugin>franka_hardware/GenericMjJointPositionHardwareSystem</plugin>
+        </xacro:if>
+        <xacro:if value="${backend == 'real'}">
+          <plugin>surgical_hand_hw/TendonHandHardwareSystem</plugin>
+        </xacro:if>
+      </hardware>
+
+      <!-- Recursive macro: emits one <joint> block per entry in the YAML list. -->
+      <xacro:macro name="add_hand_joints" params="entries">
+        <xacro:if value="${entries != []}">
+          <xacro:property name="entry" value="${entries[0]}"/>
+          <joint name="${entry['name']}">
+            <param name="actuator_name">${entry['name']}_actuator</param>
+            <param name="initial_position">${entry['initial_position']}</param>
+            <command_interface name="position">
+              <param name="min">${entry['lower']}</param>
+              <param name="max">${entry['upper']}</param>
+            </command_interface>
+            <state_interface name="position">
+              <param name="initial_value">${entry['initial_position']}</param>
+            </state_interface>
+            <state_interface name="velocity"/>
+            <state_interface name="effort"/>
+          </joint>
+          <xacro:add_hand_joints entries="${entries[1:]}"/>
+        </xacro:if>
+      </xacro:macro>
+      <xacro:add_hand_joints entries="${hand_config['joints']}"/>
+    </ros2_control>
+  </xacro:macro>
+</robot>
