@@ -46,9 +46,19 @@ bool GenericMjJointPositionHardwareSystem::initSim(
 
     JointHandle joint;
     joint.joint_name = joint_info.name;
-    joint.joint_id = mj_name2id(m_, mjOBJ_JOINT, joint.joint_name.c_str());
+    // Optional per-joint mapping for models whose MJCF joint names differ
+    // from the URDF/ros2_control joint names (e.g. the ORCA placeholder
+    // hand, whose URDF uses CAD-generated names but whose MJCF uses
+    // semantic ones). Defaults to the ros2_control joint name, so existing
+    // setups (Wuji) are unaffected.
+    auto mj_joint_param = joint_info.parameters.find("mj_joint_name");
+    const std::string mj_joint_name = mj_joint_param == joint_info.parameters.end()
+                                          ? joint.joint_name
+                                          : mj_joint_param->second;
+    joint.joint_id = mj_name2id(m_, mjOBJ_JOINT, mj_joint_name.c_str());
     if (joint.joint_id < 0) {
-      RCLCPP_FATAL(getLogger(), "No MuJoCo joint named '%s' found.", joint.joint_name.c_str());
+      RCLCPP_FATAL(getLogger(), "No MuJoCo joint named '%s' found (for ros2_control joint '%s').",
+                   mj_joint_name.c_str(), joint.joint_name.c_str());
       return false;
     }
     joint.qpos_id = m_->jnt_qposadr[joint.joint_id];
@@ -56,7 +66,7 @@ bool GenericMjJointPositionHardwareSystem::initSim(
 
     auto actuator_param = joint_info.parameters.find("actuator_name");
     const std::string actuator_name =
-        actuator_param == joint_info.parameters.end() ? joint.joint_name + "_actuator"
+        actuator_param == joint_info.parameters.end() ? mj_joint_name + "_actuator"
                                                       : actuator_param->second;
     joint.actuator_id = mj_name2id(m_, mjOBJ_ACTUATOR, actuator_name.c_str());
     if (joint.actuator_id < 0) {

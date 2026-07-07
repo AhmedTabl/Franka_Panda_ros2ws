@@ -167,12 +167,33 @@ int main(int argc, char **argv)
 #endif
 	MJR_INFO_COND(env->settings_.headless, "Running headless");
 
+#if MJR_ROS_VERSION == ROS_2 && RENDER_BACKEND == GLFW_BACKEND
+	// Local fix: with the GLFW backend in headless mode neither the viewer
+	// path (which spins the executor in a side thread) nor the
+	// non-GLFW spin below ever ran, so no ROS callbacks were serviced and
+	// services like ros2_control's controller_manager hung forever. Spin in
+	// a background thread until the sim loops exit. Non-headless behavior
+	// is unchanged.
+	std::thread headless_executor_thread;
+	if (env->settings_.headless) {
+		headless_executor_thread = std::thread(std::bind(&async_spin, std::ref(executor)));
+	}
+#endif
+
 #if MJR_ROS_VERSION == ROS_2 && RENDER_BACKEND != GLFW_BACKEND
 	executor->spin();
 #endif
 
 	env->WaitForPhysicsJoin();
 	env->WaitForEventsJoin();
+
+#if MJR_ROS_VERSION == ROS_2 && RENDER_BACKEND == GLFW_BACKEND
+	if (headless_executor_thread.joinable()) {
+		should_exit = true;
+		headless_executor_thread.join();
+	}
+#endif
+
 	env.reset();
 
 	MJR_INFO("MuJoCo ROS Simulation Server node is terminating");

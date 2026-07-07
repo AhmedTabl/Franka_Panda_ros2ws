@@ -22,25 +22,25 @@
 # state and as the fill value for joints a named pose does not specify).
 
 joints:
-  - {name: R-Carpals_8d1f1041_to_TopTower-Model_4a80d30e, alias: wrist, lower: -1.1344640137963142, upper: 0.6108652381980153, initial_position: 0.0}
+  - {name: R-Carpals_8d1f1041_to_TopTower-Model_4a80d30e, alias: wrist, mj_joint: right_wrist, lower: -1.1344640137963142, upper: 0.6108652381980153, initial_position: 0.0}
 
-  - {name: T-TP-R_1c2b802d_to_R-Carpals_8d1f1041, alias: thumb_cmc, lower: -0.7853981633974483, upper: 0.5759586531581288, initial_position: 0.0}
-  - {name: R-T-AP_a9723101_to_T-TP-R_1c2b802d, alias: thumb_abd, lower: -0.3141592653589793, upper: 0.9599310885968813, initial_position: 0.0}
-  - {name: T-PP_68395e98_to_R-T-AP_a9723101, alias: thumb_mcp, lower: -0.4363323129985824, upper: 1.7453292519943295, initial_position: 0.0}
-  - {name: T-DP_b7429e50_to_T-PP_68395e98, alias: thumb_ip, lower: -0.2617993877991494, upper: 1.8675022996339325, initial_position: 0.0}
+  - {name: T-TP-R_1c2b802d_to_R-Carpals_8d1f1041, alias: thumb_cmc, mj_joint: right_t-cmc, lower: -0.7853981633974483, upper: 0.5759586531581288, initial_position: 0.0}
+  - {name: R-T-AP_a9723101_to_T-TP-R_1c2b802d, alias: thumb_abd, mj_joint: right_t-abd, lower: -0.3141592653589793, upper: 0.9599310885968813, initial_position: 0.0}
+  - {name: T-PP_68395e98_to_R-T-AP_a9723101, alias: thumb_mcp, mj_joint: right_t-mcp, lower: -0.4363323129985824, upper: 1.7453292519943295, initial_position: 0.0}
+  - {name: T-DP_b7429e50_to_T-PP_68395e98, alias: thumb_ip, mj_joint: right_t-pip, lower: -0.2617993877991494, upper: 1.8675022996339325, initial_position: 0.0}
 
-  - {name: I-AP-R_d95d02d1_to_R-Carpals_8d1f1041, alias: index_abd, lower: -0.4363323129985824, upper: 0.5235987755982988, initial_position: 0.0}
-  - {name: I-PP_bacbd481_to_I-AP-R_d95d02d1, alias: index_mcp, lower: -0.4363323129985824, upper: 1.7453292519943295, initial_position: 0.0}
-  - {name: I-FingerTipAssembly_ec49c16c_to_I-PP_bacbd481, alias: index_tip, lower: -0.2617993877991494, upper: 1.8675022996339325, initial_position: 0.0}
+  - {name: I-AP-R_d95d02d1_to_R-Carpals_8d1f1041, alias: index_abd, mj_joint: right_i-abd, lower: -0.4363323129985824, upper: 0.5235987755982988, initial_position: 0.0}
+  - {name: I-PP_bacbd481_to_I-AP-R_d95d02d1, alias: index_mcp, mj_joint: right_i-mcp, lower: -0.4363323129985824, upper: 1.7453292519943295, initial_position: 0.0}
+  - {name: I-FingerTipAssembly_ec49c16c_to_I-PP_bacbd481, alias: index_tip, mj_joint: right_i-pip, lower: -0.2617993877991494, upper: 1.8675022996339325, initial_position: 0.0}
 
-  - {name: M-AP_e04a96f2_to_R-Carpals_8d1f1041, alias: middle_abd, lower: -0.47123889803846897, upper: 0.47123889803846897, initial_position: 0.0}
-  - {name: M-PP_08efa608_to_M-AP_e04a96f2, alias: middle_mcp, lower: -0.4363323129985824, upper: 1.7453292519943295, initial_position: 0.0}
-  - {name: M-FingerTipAssembly_34afb748_to_M-PP_08efa608, alias: middle_tip, lower: -0.2617993877991494, upper: 1.8675022996339325, initial_position: 0.0}
+  - {name: M-AP_e04a96f2_to_R-Carpals_8d1f1041, alias: middle_abd, mj_joint: right_m-abd, lower: -0.47123889803846897, upper: 0.47123889803846897, initial_position: 0.0}
+  - {name: M-PP_08efa608_to_M-AP_e04a96f2, alias: middle_mcp, mj_joint: right_m-mcp, lower: -0.4363323129985824, upper: 1.7453292519943295, initial_position: 0.0}
+  - {name: M-FingerTipAssembly_34afb748_to_M-PP_08efa608, alias: middle_tip, mj_joint: right_m-pip, lower: -0.2617993877991494, upper: 1.8675022996339325, initial_position: 0.0}
 
-  - {name: M-AP_6ec59111_to_R-Carpals_8d1f1041, alias: ring_abd, lower: -0.47123889803846897, upper: 0.47123889803846897, initial_position: 0.0}
-  - {name: M-PP_8660a1eb_to_M-AP_6ec59111, alias: ring_mcp, lower: -0.4363323129985824, upper: 1.7453292519943295, initial_position: 0.0}
-  - {name: M-FingerTipAssembly_424a8e75_to_M-PP_8660a1eb, alias: ring_tip, lower: -0.2617993877991494, upper: 1.8675022996339325, initial_position: 0.0}
+  - {name: M-AP_6ec59111_to_R-Carpals_8d1f1041, alias: ring_abd, mj_joint: right_r-abd, lower: -0.47123889803846897, upper: 0.47123889803846897, initial_position: 0.0}
+  - {name: M-PP_8660a1eb_to_M-AP_6ec59111, alias: ring_mcp, mj_joint: right_r-mcp, lower: -0.4363323129985824, upper: 1.7453292519943295, initial_position: 0.0}
+  - {name: M-FingerTipAssembly_424a8e75_to_M-PP_8660a1eb, alias: ring_tip, mj_joint: right_r-pip, lower: -0.2617993877991494, upper: 1.8675022996339325, initial_position: 0.0}
 
-  - {name: P-AP_f5e42b61_to_R-Carpals_8d1f1041, alias: pinky_abd, lower: -0.5235987755982988, upper: 0.5235987755982988, initial_position: 0.0}
-  - {name: P-PP_1d411b9b_to_P-AP_f5e42b61, alias: pinky_mcp, lower: -0.4363323129985824, upper: 1.7453292519943295, initial_position: 0.0}
-  - {name: P-FingerTipAssembly_cd219176_to_P-PP_1d411b9b, alias: pinky_tip, lower: -0.2617993877991494, upper: 1.8675022996339325, initial_position: 0.0}
+  - {name: P-AP_f5e42b61_to_R-Carpals_8d1f1041, alias: pinky_abd, mj_joint: right_p-abd, lower: -0.5235987755982988, upper: 0.5235987755982988, initial_position: 0.0}
+  - {name: P-PP_1d411b9b_to_P-AP_f5e42b61, alias: pinky_mcp, mj_joint: right_p-mcp, lower: -0.4363323129985824, upper: 1.7453292519943295, initial_position: 0.0}
+  - {name: P-FingerTipAssembly_cd219176_to_P-PP_1d411b9b, alias: pinky_tip, mj_joint: right_p-pip, lower: -0.2617993877991494, upper: 1.8675022996339325, initial_position: 0.0}

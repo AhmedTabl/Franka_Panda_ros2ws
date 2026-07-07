@@ -149,17 +149,22 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // Publish the (identical) command repeatedly for a short window instead
+  // of exactly once: a single volatile message can be lost against a busy
+  // multithreaded executor (observed with the MuJoCo backend), and the
+  // forward controller holds the last received command anyway.
   std_msgs::msg::Float64MultiArray msg;
   msg.data = command;
-  publisher->publish(msg);
+  for (int i = 0; i < 20 && rclcpp::ok(); ++i) {
+    publisher->publish(msg);
+    rclcpp::sleep_for(std::chrono::milliseconds(50));
+  }
 
   std::printf("sent pose \"%s\" to %s:\n", pose_name.c_str(), topic.c_str());
   for (size_t i = 0; i < joints.size(); ++i) {
     std::printf("  %-12s % .4f\n", joints[i].alias.c_str(), command[i]);
   }
 
-  // Give the middleware time to flush before exiting.
-  rclcpp::sleep_for(std::chrono::milliseconds(300));
   rclcpp::shutdown();
   return 0;
 }

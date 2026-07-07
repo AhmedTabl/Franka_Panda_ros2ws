@@ -23,12 +23,11 @@ ros2_control controller_manager           joint_state_broadcaster
 interchangeable hardware backend (selected by xacro arg `backend`)
         ├── mock    mock_components/GenericSystem              [WORKING]
         ├── mujoco  franka_hardware/GenericMjJointPositionHardwareSystem
-        │           (same plugin the Wuji hand uses)           [PLANNED, slice 7]
+        │           (same plugin the Wuji hand uses)           [WORKING, hand-only]
         └── real    surgical_hand_hw/TendonHandHardwareSystem
-                    (Arduino Due + DYNAMIXEL XC330, tendon drive)
-                                                               [PLANNED, slices 4-5]
-feedback (planned): motor current → tendon tension estimator (slice 3),
-eFlesh tactile interface stub (slice 6)
+                    (XC330 over U2D2, tendon drive)            [tools ready, plugin pending]
+feedback: motor current → tendon tension estimator [WORKING, uncalibrated],
+eFlesh tactile interface [SIMULATED stub]
 ```
 
 The layers above the controller manager never know which backend is active —
@@ -47,6 +46,7 @@ the same commands and topics work against fake, simulated, and real hardware.
 | `firmware/arduino_due` | Arduino | Due firmware **skeleton** (ping/status/heartbeat/write-lock implemented). Not compiled/flashed. The Due is NOT in the motor loop (see below); this stays reserved for future tactile/aux electronics. |
 | `surgical_hand_xc330` | C++ | XC330-M288-T bench tools over the U2D2: `xc330_cli` (read-only scan/ping/read/monitor + CSV logging; torque writes behind `--enable-torque`, EEPROM writes behind `--write-eeprom` with read-back verification) and the read-only `xc330_state_publisher` that feeds the tension estimator. |
 | `../DynamixelSDK` | vendored | Official ROBOTIS SDK (`ros2` branch, upstream `c9b5fda`, `.git` removed), used by `surgical_hand_xc330`. |
+| `surgical_hand_tactile` | C++ | Tactile interface stub: `TactileSource` interface + `SimulatedTactileSource` (synthetic contact episodes) + `tactile_publisher` node (per-fingertip `TactileState` topics, every message flagged `simulated`). Real eFlesh plugs in behind the same interface later. |
 | `../orcahand_description` | vendored | ORCA v2 hand model, used as the **placeholder** until the custom 3-finger hand CAD/URDF exists. See "Local patches" below. |
 
 Planned packages (not yet created): `surgical_hand_hw` (real-hardware
@@ -187,13 +187,47 @@ weights exist — Kt and efficiency).
 `backend` is a xacro arg on `surgical_hand.urdf.xacro` and a launch arg on
 `surgical_hand.launch.py`:
 
-- `mock` — works today, no physics, commands mirrored to states.
-- `mujoco` — plugin string is wired in the xacro, but the MJCF scene
-  (position actuators named `<joint>_actuator`) and the MuJoCo-server launch
-  path do not exist yet. The launch file refuses this backend for now.
+- `mock` — works, no physics, commands mirrored to states
+  (`surgical_hand.launch.py`).
+- `mujoco` — works, hand-only physics via the ORCA MJCF
+  (`surgical_hand_mujoco.launch.py`, below).
 - `real` — reserved. The plugin does not exist yet; selecting it fails loudly
   at startup rather than pretending to work. Real-hardware bringup will be a
   separate, safety-gated launch file.
+
+## MuJoCo hand simulation (slice 7, stage 1)
+
+```bash
+ros2 launch surgical_hand_bringup surgical_hand_mujoco.launch.py            # with viewer
+ros2 launch surgical_hand_bringup surgical_hand_mujoco.launch.py no_render:=true   # headless
+ros2 run surgical_hand_skills hand_pose_cli close                           # same CLI as mock
+```
+
+How it works: the ORCA MJCF uses semantic joint names (`right_i-mcp`) while
+the URDF uses CAD-generated ones, so `hand_joints.yaml` carries a per-joint
+`mj_joint` field, the ros2_control xacro emits it as `mj_joint_name`, and
+the (locally extended) `GenericMjJointPositionHardwareSystem` resolves the
+MJCF joint/actuator through it. The scene is upstream's
+`orcahand_description/v2/scene_right.xml`, unmodified.
+
+Verified headless: controllers activate, `close`/`precision_pinch`/`open`
+track through real physics (pinky mcp exact, index lags ~0.15 rad in a fist
+due to finger self-contact against ORCA's soft default actuators — kp=2,
+±1 N·m). Interaction objects (tool handle, phantom, suture/needle proxies)
+and the Franka attachment are later stages of this slice.
+
+## Tactile stub (slice 6)
+
+```bash
+ros2 run surgical_hand_tactile tactile_publisher
+ros2 topic echo /tactile_publisher/index
+```
+
+Publishes eFlesh-shaped `TactileState` per fingertip (raw magnetometer
+array + contact/forces/slip/location) from a synthetic episode generator.
+Everything is marked `simulated: true`; the real eFlesh driver later
+implements the same `TactileSource` interface without changing topics,
+messages, or consumers.
 
 ## Safety rules for the real-hardware slices (binding, not yet implemented)
 
@@ -216,8 +250,8 @@ weights exist — Kt and efficiency).
 | 3. Current→tension estimator (C++ lib + node + tests) | done: 13 gtests pass; node verified numerically (0.2 A → 9.984 N, deadband → status 1) |
 | 4. Arduino serial protocol skeleton | done: 13 tests pass (codec + pty loopback incl. write-lock behavior); CLI verified read-only-by-default; firmware skeleton written but NOT compiled/flashed |
 | 5. XC330 one-motor safe path | tools done: 7 conversion gtests pass; CLI gating verified (writes refused before port open); scan/ping/read/monitor/state-publisher ready. **Bench run against the real motor pending — U2D2 was not plugged in during development** |
-| 6. eFlesh/tactile interface stub | planned |
-| 7. MuJoCo hand backend (ORCA MJCF exists upstream: `v2/models/mjcf/`) | planned |
+| 6. eFlesh/tactile interface stub | done: 9 gtests pass; publisher runtime-verified (per-sensor topics, periodic synthetic contacts, `simulated` flag) |
+| 7. MuJoCo hand backend | stage 1 done: hand-only sim verified headless end-to-end (close/pinch/open through physics). Interaction objects + Franka attach pending |
 | 8. Skills + surgical primitives | seeded (named poses only) |
 
 ## What is stubbed / unverified right now
@@ -227,9 +261,22 @@ weights exist — Kt and efficiency).
 - `mujoco` and `real` backends are declared but not implemented.
 - Tension estimator numbers are datasheet placeholders (no bench data yet).
 - Due firmware skeleton is written but not compiled/flashed; its DYNAMIXEL
-  bus path returns NOT_IMPLEMENTED. The Due↔motor level-shifting circuit is
-  an open hardware question (see `firmware/arduino_due/README.md`).
-- No tactile interface yet.
+  bus path returns NOT_IMPLEMENTED (the Due is out of the motor loop anyway).
+- Tactile data is entirely synthetic (`simulated: true` on every message);
+  real eFlesh needs a magnetometer-board driver + calibration model behind
+  the existing `TactileSource` interface.
+- MuJoCo sim is hand-only: no interaction objects, no Franka attachment yet.
+  ORCA's default MJCF actuators are soft (kp=2, ±1 N·m); expect fingertip
+  lag under contact until retuned.
+
+Local patches to other vendored/workspace packages (beyond orcahand):
+
+- `multipanda_ros2/franka_hardware` `GenericMjJointPositionHardwareSystem`:
+  added optional per-joint `mj_joint_name` parameter (default = joint name,
+  Wuji path unchanged).
+- `mujoco_ros_pkgs/mujoco_ros` `main.cpp`: fixed headless+GLFW builds never
+  spinning the ROS executor (all services, incl. controller_manager, hung).
+  Worth upstreaming to ubi-agni/mujoco_ros_pkgs.
 - ORCA URDF inertials look non-physical (upstream issue); irrelevant for the
   mock backend, must be revisited for MuJoCo (the upstream MJCF models are the
   likely source of truth there).

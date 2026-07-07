@@ -7,6 +7,7 @@ find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/TendonTension.msg"
+  "msg/TactileState.msg"
   DEPENDENCIES std_msgs
 )
 
