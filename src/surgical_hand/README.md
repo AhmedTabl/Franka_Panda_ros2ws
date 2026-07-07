@@ -44,7 +44,9 @@ the same commands and topics work against fake, simulated, and real hardware.
 | `surgical_hand_msgs` | msg | Interfaces (`TendonTension.msg`; tactile/hardware status messages later). |
 | `surgical_hand_estimation` | C++ | Current→tension estimator: ROS-free `tension_estimator` library (unit-tested, reusable inside the future hardware plugin) + `tension_estimator_node`. **An observer, not a sensor** — gearbox/spool friction, slack, hysteresis, and heating all bias it; consume `status`/`confidence` alongside `tension_n`. |
 | `surgical_hand_serial` | C++ | Host↔Arduino Due protocol: CRC16-framed packet codec, POSIX serial wrapper, `DueClient`, and the `hand_serial_cli` bench tool. ROS-free; loopback-tested over a pty. |
-| `firmware/arduino_due` | Arduino | Due firmware **skeleton** (ping/status/heartbeat/write-lock implemented; DYNAMIXEL bus stubbed). Not a colcon package; not yet compiled/flashed. Wiring assumptions + unknowns in its README. |
+| `firmware/arduino_due` | Arduino | Due firmware **skeleton** (ping/status/heartbeat/write-lock implemented). Not compiled/flashed. The Due is NOT in the motor loop (see below); this stays reserved for future tactile/aux electronics. |
+| `surgical_hand_xc330` | C++ | XC330-M288-T bench tools over the U2D2: `xc330_cli` (read-only scan/ping/read/monitor + CSV logging; torque writes behind `--enable-torque`, EEPROM writes behind `--write-eeprom` with read-back verification) and the read-only `xc330_state_publisher` that feeds the tension estimator. |
+| `../DynamixelSDK` | vendored | Official ROBOTIS SDK (`ros2` branch, upstream `c9b5fda`, `.git` removed), used by `surgical_hand_xc330`. |
 | `../orcahand_description` | vendored | ORCA v2 hand model, used as the **placeholder** until the custom 3-finger hand CAD/URDF exists. See "Local patches" below. |
 
 Planned packages (not yet created): `surgical_hand_hw` (real-hardware
@@ -141,6 +143,45 @@ the real firmware skeleton lives in `firmware/arduino_due/` (not yet
 compiled/flashed — see its README for wiring assumptions and open questions,
 notably 3.3 V Due vs 5 V DYNAMIXEL TTL level shifting).
 
+## XC330 one-motor bench path (slice 5)
+
+Hardware: **XC330-M288-T → U2D2 → PC over USB**, U2D2 powered from an
+external 5 V supply. The Arduino Due is not in the motor loop.
+
+Bench procedure (first four steps are read-only):
+
+```bash
+ls /dev/ttyUSB*                                                     # U2D2 (FTDI) device
+ros2 run surgical_hand_xc330 xc330_cli --port /dev/ttyUSB0 scan     # finds id + baud
+ros2 run surgical_hand_xc330 xc330_cli --port /dev/ttyUSB0 --baud 57600 read 1
+ros2 run surgical_hand_xc330 xc330_cli --port /dev/ttyUSB0 --baud 57600 monitor 1 --hz 50 --csv xc330_log.csv
+
+# one-time safe configuration (EEPROM; torque must be off; read-back verified)
+ros2 run surgical_hand_xc330 xc330_cli --port ... set-current-limit 1 --ma 300 --write-eeprom
+ros2 run surgical_hand_xc330 xc330_cli --port ... set-mode 1 current-position --write-eeprom
+
+# first motion, deliberately weak (current-capped)
+ros2 run surgical_hand_xc330 xc330_cli --port ... torque-on 1 --enable-torque
+ros2 run surgical_hand_xc330 xc330_cli --port ... goal-current 1 --ma 100 --enable-torque
+ros2 run surgical_hand_xc330 xc330_cli --port ... goal-position 1 --deg 10 --enable-torque
+ros2 run surgical_hand_xc330 xc330_cli --port ... torque-off 1
+```
+
+Chain the real motor into the tension estimator (both read-only):
+
+```bash
+ros2 run surgical_hand_xc330 xc330_state_publisher --ros-args \
+  -p port:=/dev/ttyUSB0 -p baud:=57600 -p id:=1 \
+  -r ~/motor_current:=/tension_estimator/motor_current
+ros2 run surgical_hand_estimation tension_estimator_node --ros-args \
+  --params-file $(ros2 pkg prefix surgical_hand_estimation)/share/surgical_hand_estimation/config/tension_estimator.yaml
+ros2 topic echo /tension_estimator/tension
+```
+
+The `monitor --csv` logs are what the estimator characterization needs
+(no-load current offset, deadband, and — once a spool and load cell or known
+weights exist — Kt and efficiency).
+
 ## Backend selection
 
 `backend` is a xacro arg on `surgical_hand.urdf.xacro` and a launch arg on
@@ -174,7 +215,7 @@ notably 3.3 V Due vs 5 V DYNAMIXEL TTL level shifting).
 | 2. Fake hand backend | done, verified end-to-end (build + launch + pose command + joint-state check) |
 | 3. Current→tension estimator (C++ lib + node + tests) | done: 13 gtests pass; node verified numerically (0.2 A → 9.984 N, deadband → status 1) |
 | 4. Arduino serial protocol skeleton | done: 13 tests pass (codec + pty loopback incl. write-lock behavior); CLI verified read-only-by-default; firmware skeleton written but NOT compiled/flashed |
-| 5. XC330 one-motor safe path | next |
+| 5. XC330 one-motor safe path | tools done: 7 conversion gtests pass; CLI gating verified (writes refused before port open); scan/ping/read/monitor/state-publisher ready. **Bench run against the real motor pending — U2D2 was not plugged in during development** |
 | 6. eFlesh/tactile interface stub | planned |
 | 7. MuJoCo hand backend (ORCA MJCF exists upstream: `v2/models/mjcf/`) | planned |
 | 8. Skills + surgical primitives | seeded (named poses only) |

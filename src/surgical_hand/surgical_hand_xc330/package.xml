@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>surgical_hand_xc330</name>
+  <version>0.1.0</version>
+  <description>
+    Safe bench tools for the DYNAMIXEL XC330-M288-T over a U2D2: read-only
+    scan/ping/read/monitor CLI with CSV logging, torque/EEPROM writes gated
+    behind explicit flags, and a read-only ROS 2 state publisher that feeds
+    the current-based tension estimator.
+  </description>
+  <maintainer email="ahmed.tabl@torontomu.ca">Ahmed Tabl</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>dynamixel_sdk</depend>
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

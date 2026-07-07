@@ -54,9 +54,12 @@ Unresolved (must be settled before wiring the motor):
    design) or a ready-made interface (DYNAMIXEL Shield, or a diode+resistor
    half-duplex circuit rated for 3.3 V) is required. **Do not wire TX/RX
    directly.**
-2. Whether the Due stays in the loop for the motor at all vs. a U2D2/USB
-   adapter direct to the PC for slice 5 bench characterization (the Due
-   remains needed later for tactile/auxiliary sensors either way; the
-   protocol above is transport-agnostic on purpose).
+2. ~~Whether the Due stays in the loop for the motor at all vs. a U2D2/USB
+   adapter direct to the PC.~~ **RESOLVED (2026-07-07): the bench setup is
+   XC330 → U2D2 → PC over USB, with the U2D2 powered from an external 5 V
+   supply. The PC talks to the motor directly via `surgical_hand_xc330`
+   (DYNAMIXEL SDK); the Due is NOT in the motor loop.** The Due + this
+   protocol stay reserved for future tactile/auxiliary electronics, which
+   also removes unknowns 1/3/4 from the critical path.
 3. Direction-pin choice and timing for bus turnaround.
 4. Connector/pinout of the XC330 (JST EH 3-pin: GND, VDD, DATA) harness.
