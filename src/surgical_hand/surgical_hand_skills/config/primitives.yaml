@@ -1,0 +1,94 @@
+# Surgical manipulation primitive skeletons (slice 8).
+#
+# These are the five basic primitives from the hand design doc (CABG
+# suturing task decomposition), expressed as SCRIPTED pose sequences:
+#   1. needle_driver_acquisition  - pick up and orient the needle driver
+#   2. needle_loading             - load/orient the curved needle in the jaws
+#   3. needle_driving             - drive the needle through a phantom (wrist arc)
+#   4. suture_pull                - pull suture with controlled tension
+#   5. knot_approximation         - two-throw knot cinch without excessive force
+#
+# STATUS: skeletons. Poses are the untuned placeholders from
+# named_poses.yaml; durations are guesses; `max_tension_n` /
+# `require_contact` guards are parsed and logged by primitive_cli but not
+# yet enforced (that is the declared next stage, once the tension estimator
+# is bench-calibrated and tactile hardware exists).
+#
+# Step fields: name, pose (from named_poses.yaml), duration_s,
+# overrides (joint alias -> rad, wins over the pose; used mainly for wrist
+# arcs), max_tension_n, require_contact.
+
+primitives:
+  needle_driver_acquisition:
+    description: Acquire, grip, and stabilize the needle driver (doc primitive 1).
+    steps:
+      - {name: approach, pose: open, duration_s: 1.5}
+      - name: preshape
+        pose: tripod_grasp
+        duration_s: 1.5
+        overrides: {index_mcp: 0.45, middle_mcp: 0.45, thumb_mcp: 0.40, index_tip: 0.40, middle_tip: 0.40}
+      - {name: grasp, pose: needle_driver_grasp, duration_s: 2.0, max_tension_n: 3.0}
+      - {name: stabilize, pose: needle_driver_grasp, duration_s: 1.0}
+
+  needle_loading:
+    description: Load and orient the curved needle in the driver jaws (doc primitive 2).
+    steps:
+      - {name: hold_driver, pose: needle_driver_grasp, duration_s: 1.0}
+      - {name: regrasp_needle, pose: precision_pinch, duration_s: 1.5, require_contact: true}
+      - name: orient_needle
+        pose: precision_pinch
+        duration_s: 1.5
+        overrides: {wrist: 0.30}
+      - {name: fixate, pose: needle_driver_grasp, duration_s: 1.5, max_tension_n: 3.0}
+
+  needle_driving:
+    description: Insert and drive the needle through the phantom with a wrist arc (doc primitive 3).
+    steps:
+      - name: ready
+        pose: needle_driver_grasp
+        duration_s: 1.5
+        overrides: {wrist: 0.40}
+      - name: insert
+        pose: needle_driver_grasp
+        duration_s: 1.5
+        overrides: {wrist: 0.0}
+      - name: drive_arc
+        pose: needle_driver_grasp
+        duration_s: 2.5
+        overrides: {wrist: -0.70}
+        max_tension_n: 3.5
+      - {name: release, pose: open, duration_s: 1.5}
+
+  suture_pull:
+    description: Pull suture through with controlled tension (doc primitive 4).
+    steps:
+      - {name: pinch_suture, pose: suture_pinch, duration_s: 1.5, require_contact: true}
+      - name: pull
+        pose: suture_pinch
+        duration_s: 2.0
+        overrides: {wrist: -0.50}
+        max_tension_n: 2.0
+      - name: hold_tension
+        pose: suture_pinch
+        duration_s: 1.0
+        overrides: {wrist: -0.50}
+        max_tension_n: 2.0
+      - {name: release, pose: open, duration_s: 1.0}
+
+  knot_approximation:
+    description: Form and cinch a two-throw knot without excessive force (doc primitive 5).
+    steps:
+      - {name: pinch, pose: suture_pinch, duration_s: 1.5, require_contact: true}
+      - name: cinch_first_throw
+        pose: suture_pinch
+        duration_s: 1.5
+        overrides: {wrist: -0.40}
+        max_tension_n: 1.5
+      - {name: reposition, pose: precision_pinch, duration_s: 1.0}
+      - {name: regrasp, pose: suture_pinch, duration_s: 1.5, require_contact: true}
+      - name: cinch_second_throw
+        pose: suture_pinch
+        duration_s: 1.5
+        overrides: {wrist: -0.60}
+        max_tension_n: 1.5
+      - {name: release, pose: open, duration_s: 1.0}

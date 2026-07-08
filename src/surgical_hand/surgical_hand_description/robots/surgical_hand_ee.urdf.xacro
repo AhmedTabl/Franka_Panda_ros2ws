@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!--
+  Surgical hand as a Franka end effector.
+
+  Passed to franka_bringup's existing custom end-effector hook:
+
+    panda_arm_sim.urdf.xacro  end_effector:=custom
+      end_effector_urdf:=<this file>
+      end_effector_base_link:=ForeArmStructure-Model_e18f2368
+
+  The panda xacro includes this file and adds the fixed attachment joint
+  itself; this file only contributes the ORCA links/joints and the hand's
+  ros2_control block (MuJoCo backend). See
+  surgical_hand_bringup/launch/surgical_hand_franka_mujoco.launch.py.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find orcahand_description)/v2/models/urdf/orcahand_right.urdf"/>
+
+  <xacro:include filename="$(find surgical_hand_description)/robots/surgical_hand.ros2_control.xacro"/>
+  <xacro:surgical_hand_ros2_control name="surgical_hand" backend="mujoco"
+      config_file="$(find surgical_hand_description)/config/hand_joints.yaml"/>
+</robot>

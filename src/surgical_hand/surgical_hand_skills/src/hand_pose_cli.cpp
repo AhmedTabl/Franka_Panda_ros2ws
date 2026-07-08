@@ -4,22 +4,11 @@
 //   ros2 run surgical_hand_skills hand_pose_cli list
 //   ros2 run surgical_hand_skills hand_pose_cli <pose_name>
 //
-// Reads:
-//   surgical_hand_description/config/hand_joints.yaml  (joint order, limits,
-//                                                       aliases, neutrals)
-//   surgical_hand_skills/config/named_poses.yaml       (pose definitions)
-//
-// Publishes one std_msgs/Float64MultiArray on
-// /hand_joint_position_controller/commands, ordered exactly as the joint
-// list in hand_joints.yaml (the same order the controller is configured
-// with at launch time).
-//
-// This tool is backend-agnostic: it works identically against the mock,
-// MuJoCo, and (later) real backends because it only talks to the
-// ros2_control controller topic. Safety gating for real hardware lives in
-// the hardware layer, not here.
+// Backend-agnostic: works identically against the mock, MuJoCo, and (later)
+// real backends because it only talks to the ros2_control controller topic.
+// Safety gating for real hardware lives in the hardware layer, not here.
+// Pose loading/validation lives in pose_library (shared with primitive_cli).
 
-#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <string>
@@ -28,71 +17,10 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
-#include <yaml-cpp/yaml.h>
 
-namespace {
+#include "surgical_hand_skills/pose_library.hpp"
 
-struct HandJoint {
-  std::string name;
-  std::string alias;
-  double lower{0.0};
-  double upper{0.0};
-  double initial_position{0.0};
-};
-
-std::vector<HandJoint> loadHandJoints(const std::string& config_path) {
-  const YAML::Node config = YAML::LoadFile(config_path);
-  std::vector<HandJoint> joints;
-  for (const auto& entry : config["joints"]) {
-    HandJoint joint;
-    joint.name = entry["name"].as<std::string>();
-    joint.alias = entry["alias"].as<std::string>();
-    joint.lower = entry["lower"].as<double>();
-    joint.upper = entry["upper"].as<double>();
-    joint.initial_position = entry["initial_position"].as<double>();
-    joints.push_back(joint);
-  }
-  return joints;
-}
-
-YAML::Node loadPoses(const std::string& poses_path) {
-  return YAML::LoadFile(poses_path)["poses"];
-}
-
-int listPoses(const YAML::Node& poses) {
-  std::printf("Available poses:\n");
-  for (const auto& pose : poses) {
-    std::printf("  %s\n", pose.first.as<std::string>().c_str());
-  }
-  return 0;
-}
-
-// Build the command vector in hand_joints.yaml order. Joints the pose does
-// not mention hold their initial (neutral) position. Values are clamped to
-// the joint limits, with a warning, so a bad pose file cannot command an
-// out-of-range position.
-std::vector<double> buildCommand(const std::vector<HandJoint>& joints,
-                                 const YAML::Node& pose) {
-  std::vector<double> command;
-  command.reserve(joints.size());
-  for (const auto& joint : joints) {
-    double value = joint.initial_position;
-    if (pose[joint.alias]) {
-      value = pose[joint.alias].as<double>();
-    }
-    const double clamped = std::clamp(value, joint.lower, joint.upper);
-    if (clamped != value) {
-      std::fprintf(stderr,
-                   "warning: %s (%s) value %.4f outside [%.4f, %.4f]; clamped to %.4f\n",
-                   joint.alias.c_str(), joint.name.c_str(), value, joint.lower,
-                   joint.upper, clamped);
-    }
-    command.push_back(clamped);
-  }
-  return command;
-}
-
-}  // namespace
+namespace shs = surgical_hand_skills;
 
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
@@ -105,66 +33,74 @@ int main(int argc, char** argv) {
   }
   const std::string pose_name = args[1];
 
-  const std::string joints_path =
-      ament_index_cpp::get_package_share_directory("surgical_hand_description") +
-      "/config/hand_joints.yaml";
-  const std::string poses_path =
-      ament_index_cpp::get_package_share_directory("surgical_hand_skills") +
-      "/config/named_poses.yaml";
+  try {
+    const shs::PoseLibrary library(
+        ament_index_cpp::get_package_share_directory("surgical_hand_description") +
+            "/config/hand_joints.yaml",
+        ament_index_cpp::get_package_share_directory("surgical_hand_skills") +
+            "/config/named_poses.yaml");
 
-  const YAML::Node poses = loadPoses(poses_path);
-  if (pose_name == "list") {
-    const int result = listPoses(poses);
-    rclcpp::shutdown();
-    return result;
-  }
-  if (!poses[pose_name]) {
-    std::fprintf(stderr, "error: unknown pose \"%s\" (try: hand_pose_cli list)\n",
-                 pose_name.c_str());
-    rclcpp::shutdown();
-    return 2;
-  }
+    if (pose_name == "list") {
+      std::printf("Available poses:\n");
+      for (const auto& name : library.poseNames()) {
+        std::printf("  %s\n", name.c_str());
+      }
+      rclcpp::shutdown();
+      return 0;
+    }
+    if (!library.hasPose(pose_name)) {
+      std::fprintf(stderr, "error: unknown pose \"%s\" (try: hand_pose_cli list)\n",
+                   pose_name.c_str());
+      rclcpp::shutdown();
+      return 2;
+    }
 
-  const std::vector<HandJoint> joints = loadHandJoints(joints_path);
-  const std::vector<double> command = buildCommand(joints, poses[pose_name]);
+    std::vector<std::string> clamped;
+    const std::vector<double> command = library.buildCommand(pose_name, {}, &clamped);
+    for (const auto& alias : clamped) {
+      std::fprintf(stderr, "warning: %s clamped to its joint limits\n", alias.c_str());
+    }
 
-  auto node = rclcpp::Node::make_shared("hand_pose_cli");
-  const std::string topic = node->declare_parameter<std::string>(
-      "topic", "/hand_joint_position_controller/commands");
-  auto publisher = node->create_publisher<std_msgs::msg::Float64MultiArray>(topic, 10);
+    auto node = rclcpp::Node::make_shared("hand_pose_cli");
+    const std::string topic = node->declare_parameter<std::string>(
+        "topic", "/hand_joint_position_controller/commands");
+    auto publisher = node->create_publisher<std_msgs::msg::Float64MultiArray>(topic, 10);
 
-  // Wait for the controller to be subscribed so the one-shot message is not
-  // lost to discovery timing.
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-  while (publisher->get_subscription_count() == 0 &&
-         std::chrono::steady_clock::now() < deadline && rclcpp::ok()) {
-    rclcpp::sleep_for(std::chrono::milliseconds(100));
-  }
-  if (publisher->get_subscription_count() == 0) {
-    std::fprintf(stderr,
-                 "error: no subscriber on %s after 5 s. Is the hand stack "
-                 "running (surgical_hand_bringup)?\n",
-                 topic.c_str());
+    // Wait for the controller so the command is not lost to discovery.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (publisher->get_subscription_count() == 0 &&
+           std::chrono::steady_clock::now() < deadline && rclcpp::ok()) {
+      rclcpp::sleep_for(std::chrono::milliseconds(100));
+    }
+    if (publisher->get_subscription_count() == 0) {
+      std::fprintf(stderr,
+                   "error: no subscriber on %s after 5 s. Is the hand stack running?\n",
+                   topic.c_str());
+      rclcpp::shutdown();
+      return 1;
+    }
+
+    // Publish the (identical) command repeatedly for a short window: a
+    // single volatile message can be lost against a busy multithreaded
+    // executor (observed with the MuJoCo backend), and the forward
+    // controller holds the last received command anyway.
+    std_msgs::msg::Float64MultiArray msg;
+    msg.data = command;
+    for (int i = 0; i < 20 && rclcpp::ok(); ++i) {
+      publisher->publish(msg);
+      rclcpp::sleep_for(std::chrono::milliseconds(50));
+    }
+
+    std::printf("sent pose \"%s\" to %s:\n", pose_name.c_str(), topic.c_str());
+    const auto& joints = library.joints();
+    for (size_t i = 0; i < joints.size(); ++i) {
+      std::printf("  %-12s % .4f\n", joints[i].alias.c_str(), command[i]);
+    }
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "error: %s\n", e.what());
     rclcpp::shutdown();
     return 1;
   }
-
-  // Publish the (identical) command repeatedly for a short window instead
-  // of exactly once: a single volatile message can be lost against a busy
-  // multithreaded executor (observed with the MuJoCo backend), and the
-  // forward controller holds the last received command anyway.
-  std_msgs::msg::Float64MultiArray msg;
-  msg.data = command;
-  for (int i = 0; i < 20 && rclcpp::ok(); ++i) {
-    publisher->publish(msg);
-    rclcpp::sleep_for(std::chrono::milliseconds(50));
-  }
-
-  std::printf("sent pose \"%s\" to %s:\n", pose_name.c_str(), topic.c_str());
-  for (size_t i = 0; i < joints.size(); ++i) {
-    std::printf("  %-12s % .4f\n", joints[i].alias.c_str(), command[i]);
-  }
-
   rclcpp::shutdown();
   return 0;
 }

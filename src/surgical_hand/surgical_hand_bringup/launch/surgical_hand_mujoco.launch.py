@@ -35,7 +35,16 @@ def _setup(context, *args, **kwargs):
     orca_pkg = get_package_share_directory('orcahand_description')
     franka_bringup_pkg = get_package_share_directory('franka_bringup')
 
-    scene_file = os.path.join(orca_pkg, 'v2', 'scene_right.xml')
+    scene = LaunchConfiguration('scene').perform(context)
+    if scene == 'plain':
+        scene_file = os.path.join(orca_pkg, 'v2', 'scene_right.xml')
+    elif scene == 'objects':
+        # Hand + interaction object proxies (tool handle, phantom block,
+        # needle and suture proxies). Generated file with absolute mesh
+        # paths: see surgical_hand_description/scripts/generate_mujoco_scenes.py.
+        scene_file = os.path.join(description_pkg, 'mujoco', 'scene_objects.xml')
+    else:
+        raise RuntimeError(f'Unknown scene "{scene}". Use scene:=plain or scene:=objects.')
     config_file = os.path.join(description_pkg, 'config', 'hand_joints.yaml')
     xacro_file = os.path.join(description_pkg, 'robots', 'surgical_hand.urdf.xacro')
     static_plugin_yaml = os.path.join(bringup_pkg, 'config', 'surgical_hand_mujoco.yaml')
@@ -118,5 +127,7 @@ def generate_launch_description():
                               description='Disable all rendering (headless verification)'),
         DeclareLaunchArgument('use_rviz', default_value='false',
                               description='Start RViz alongside the sim'),
+        DeclareLaunchArgument('scene', default_value='plain',
+                              description='plain (hand only) or objects (hand + tool/phantom/needle/suture proxies)'),
         OpaqueFunction(function=_setup),
     ])

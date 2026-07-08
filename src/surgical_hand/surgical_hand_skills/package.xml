@@ -17,6 +17,9 @@
   <depend>std_msgs</depend>
   <depend>ament_index_cpp</depend>
   <depend>yaml_cpp_vendor</depend>
+  <depend>surgical_hand_msgs</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
 
   <exec_depend>surgical_hand_description</exec_depend>
 

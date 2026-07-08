@@ -61,6 +61,7 @@ def generate_launch_description():
 
     def launch_setup(context, *args, **kwargs):
         hand = LaunchConfiguration(hand_param).perform(context).lower() in ('true', '1', 'yes', 'on')
+        no_render = LaunchConfiguration('no_render').perform(context).lower() in ('true', '1', 'yes', 'on')
         end_effector = LaunchConfiguration(end_effector_param).perform(context).lower()
         end_effector_scene = LaunchConfiguration(end_effector_scene_param).perform(context)
 
@@ -127,7 +128,14 @@ def generate_launch_description():
                     'modelfile': xml_file,
                     'verbose': "true",
                     'ns': ns,
-                    'mujoco_plugin_config': mjros_config_file
+                    'mujoco_plugin_config': mjros_config_file,
+                    # headless support (default false = unchanged behavior);
+                    # all three flags must be coherent, see
+                    # launch_mujoco_ros_server.launch arg descriptions.
+                    'no_render': str(no_render).lower(),
+                    'headless': str(no_render).lower(),
+                    'render_offscreen': str(not no_render).lower(),
+                    'unpause': 'true' if no_render else 'false',
                 }.items()
             ),
             node_robot_state_publisher,
@@ -168,6 +176,10 @@ def generate_launch_description():
             use_rviz_param,
             default_value='false',
             description='Visualize the robot in Rviz'),
+        DeclareLaunchArgument(
+            'no_render',
+            default_value='false',
+            description='Run the MuJoCo server headless (no viewer, unpaused on start).'),
         DeclareLaunchArgument(
             hand_param,
             default_value='true',

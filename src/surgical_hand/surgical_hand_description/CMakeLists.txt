@@ -3,7 +3,7 @@ project(surgical_hand_description)
 
 find_package(ament_cmake REQUIRED)
 
-install(DIRECTORY config robots
+install(DIRECTORY config robots mujoco scripts
   DESTINATION share/${PROJECT_NAME}
 )
 

@@ -11,10 +11,10 @@ generic MuJoCo joint-position hardware plugin from `franka_hardware`).
 ## Target Architecture
 
 ```
-surgical primitive state machines        (slice 8, planned)
-        │  hand skill commands
+surgical primitive sequences             primitive_cli (5 CABG primitives; scripted,
+        │  steps: pose+overrides+guards   feedback logged, guards not yet enforced)
         ▼
-named poses / skills  ──────────────────  surgical_hand_skills (hand_pose_cli today)
+named poses / skills  ──────────────────  surgical_hand_skills (pose_library + hand_pose_cli)
         │  Float64MultiArray on /hand_joint_position_controller/commands
         ▼
 ros2_control controller_manager           joint_state_broadcaster
@@ -39,7 +39,7 @@ the same commands and topics work against fake, simulated, and real hardware.
 |---|---|---|
 | `surgical_hand_description` | xacro/YAML | Robot description wrapper + backend-switchable ros2_control block. **`config/hand_joints.yaml` is the single source of truth for the joint set** (names, aliases, limits, neutral pose). |
 | `surgical_hand_bringup` | launch/YAML | Standalone hand bringup (mock backend today). Controller joint list is generated at launch time from `hand_joints.yaml` — never hand-edited. |
-| `surgical_hand_skills` | C++ | Named hand poses (`config/named_poses.yaml`, keyed by joint *aliases*) and the `hand_pose_cli` tool. Will grow into the skills/primitives layer. |
+| `surgical_hand_skills` | C++ | Skills layer: `pose_library` (joints + named poses + command building, ROS-free), `primitive_engine` (validated primitive sequences from `config/primitives.yaml`), and the `hand_pose_cli` / `primitive_cli` tools. |
 | `surgical_hand_msgs` | msg | Interfaces (`TendonTension.msg`; tactile/hardware status messages later). |
 | `surgical_hand_estimation` | C++ | Current→tension estimator: ROS-free `tension_estimator` library (unit-tested, reusable inside the future hardware plugin) + `tension_estimator_node`. **An observer, not a sensor** — gearbox/spool friction, slack, hysteresis, and heating all bias it; consume `status`/`confidence` alongside `tension_n`. |
 | `surgical_hand_serial` | C++ | Host↔Arduino Due protocol: CRC16-framed packet codec, POSIX serial wrapper, `DueClient`, and the `hand_serial_cli` bench tool. ROS-free; loopback-tested over a pty. |
@@ -213,8 +213,62 @@ MJCF joint/actuator through it. The scene is upstream's
 Verified headless: controllers activate, `close`/`precision_pinch`/`open`
 track through real physics (pinky mcp exact, index lags ~0.15 rad in a fist
 due to finger self-contact against ORCA's soft default actuators — kp=2,
-±1 N·m). Interaction objects (tool handle, phantom, suture/needle proxies)
-and the Franka attachment are later stages of this slice.
+±1 N·m).
+
+Interaction objects (`scene:=objects`): tool-handle cylinder, phantom
+block, straight needle proxy, and a 4-segment ball-joint suture chain,
+placed near the hand (placements untuned for actual grasp demos):
+
+```bash
+ros2 launch surgical_hand_bringup surgical_hand_mujoco.launch.py scene:=objects
+```
+
+Franka attachment — the hand on the Panda flange via franka_bringup's
+existing *custom end-effector* hook (no franka_description edits):
+
+```bash
+ros2 launch surgical_hand_bringup surgical_hand_franka_mujoco.launch.py   # add no_render:=true for headless
+ros2 run surgical_hand_skills hand_pose_cli close
+```
+
+Pieces: [surgical_hand_ee.urdf.xacro](surgical_hand_description/robots/surgical_hand_ee.urdf.xacro)
+(ORCA URDF + hand ros2_control block), generated `panda_orca_ng.xml` /
+`scene_orca_ng.xml` (namespaced defaults/materials, gravcomp on all hand
+bodies, per-body contact excludes), and a wrapper launch that spawns the
+hand controller via `spawner --controller-type --param-file` so
+franka_bringup's controller YAML stays untouched. Verified headless: 24
+joints in `/joint_states`, hand tracks `needle_driver_grasp` while the arm
+holds its start pose. Caveats: the flange mount transform is an untuned
+placeholder (keep the launch args and `MOUNT_*` in the generator in sync);
+start an arm controller for real arm work — with none active the panda's
+default position actuators slowly pull it to the zero pose; franka_sim's
+`joint_state_publisher` aggregator also publishes zeros on `/joint_states`
+alongside the broadcaster (pre-existing franka_sim quirk — filter by
+publisher or use the controller topics).
+
+All scene files regenerate with
+`python3 surgical_hand_description/scripts/generate_mujoco_scenes.py`
+(absolute mesh paths — rerun after moving the workspace).
+
+## Surgical primitives (slice 8)
+
+The five basic CABG primitives from the design doc as validated, scripted
+pose sequences ([primitives.yaml](surgical_hand_skills/config/primitives.yaml)):
+needle_driver_acquisition, needle_loading, needle_driving (wrist arc),
+suture_pull, knot_approximation.
+
+```bash
+ros2 run surgical_hand_skills primitive_cli list
+ros2 run surgical_hand_skills primitive_cli needle_driving
+```
+
+Each step = named pose + per-alias overrides + duration + optional guards
+(`max_tension_n`, `require_contact`). The runner republishes commands at
+20 Hz per step, logs the latest tendon-tension estimate and tactile state
+at every transition, and reports guard violations as warnings — guards are
+**deliberately not enforced yet** (that needs the bench-calibrated
+estimator and real tactile hardware). Works against any backend; verified
+on the fake backend with the estimator + simulated tactile running.
 
 ## Tactile stub (slice 6)
 
@@ -251,8 +305,8 @@ messages, or consumers.
 | 4. Arduino serial protocol skeleton | done: 13 tests pass (codec + pty loopback incl. write-lock behavior); CLI verified read-only-by-default; firmware skeleton written but NOT compiled/flashed |
 | 5. XC330 one-motor safe path | tools done: 7 conversion gtests pass; CLI gating verified (writes refused before port open); scan/ping/read/monitor/state-publisher ready. **Bench run against the real motor pending — U2D2 was not plugged in during development** |
 | 6. eFlesh/tactile interface stub | done: 9 gtests pass; publisher runtime-verified (per-sensor topics, periodic synthetic contacts, `simulated` flag) |
-| 7. MuJoCo hand backend | stage 1 done: hand-only sim verified headless end-to-end (close/pinch/open through physics). Interaction objects + Franka attach pending |
-| 8. Skills + surgical primitives | seeded (named poses only) |
+| 7. MuJoCo hand backend | done: hand-only, interaction objects, and Franka attachment all verified headless (mount transform + object placements untuned) |
+| 8. Skills + surgical primitives | done as skeletons: 5 primitives sequenced with feedback logging; 8 engine gtests; guards parsed but not enforced |
 
 ## What is stubbed / unverified right now
 
@@ -265,9 +319,12 @@ messages, or consumers.
 - Tactile data is entirely synthetic (`simulated: true` on every message);
   real eFlesh needs a magnetometer-board driver + calibration model behind
   the existing `TactileSource` interface.
-- MuJoCo sim is hand-only: no interaction objects, no Franka attachment yet.
-  ORCA's default MJCF actuators are soft (kp=2, ±1 N·m); expect fingertip
-  lag under contact until retuned.
+- ORCA's default MJCF actuators are soft (kp=2, ±1 N·m); expect fingertip
+  lag under contact until retuned. The Franka flange mount transform and
+  the interaction-object placements are untuned placeholders; the needle
+  proxy is straight (curved needle needs a mesh/multi-capsule weld).
+- Primitives are scripted pose sequences with placeholder durations;
+  tension/tactile guards are logged, not enforced.
 
 Local patches to other vendored/workspace packages (beyond orcahand):
 
@@ -277,6 +334,8 @@ Local patches to other vendored/workspace packages (beyond orcahand):
 - `mujoco_ros_pkgs/mujoco_ros` `main.cpp`: fixed headless+GLFW builds never
   spinning the ROS executor (all services, incl. controller_manager, hung).
   Worth upstreaming to ubi-agni/mujoco_ros_pkgs.
+- `multipanda_ros2/franka_bringup` `franka_sim.launch.py`: added an optional
+  `no_render` arg (default false = unchanged) for headless runs.
 - ORCA URDF inertials look non-physical (upstream issue); irrelevant for the
   mock backend, must be revisited for MuJoCo (the upstream MJCF models are the
   likely source of truth there).
